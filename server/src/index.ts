@@ -7,6 +7,7 @@ import messagesRouter from './routes/messages';
 import devicesRouter  from './routes/devices';
 import authRouter     from './routes/auth';
 import healthRouter   from './routes/health';
+import landingRouter  from './routes/landing';
 
 const app = express();
 
@@ -15,12 +16,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
+// ─── API Routes ───────────────────────────────────────────────────────────────
 
 app.use('/api/v1/messages', messagesRouter);
-app.use('/api/v1/auth', authRouter);
-app.use('/api/v1', devicesRouter);
-app.use('/health', healthRouter);
+app.use('/api/v1/auth',     authRouter);
+app.use('/api/v1',          devicesRouter);
+app.use('/health',          healthRouter);
+
+// ─── Landing page — exact GET / only (must be after all API routes) ───────────
+
+app.use('/', landingRouter);
 
 // ─── Error Handler ────────────────────────────────────────────────────────────
 
@@ -34,12 +39,13 @@ app.use((_req: Request, res: Response) => {
 });
 
 // ─── Local dev server ─────────────────────────────────────────────────────────
-// Vercel ignores this block and uses the exported `app` directly.
+// Vercel ignores this and uses the exported `app` directly.
 
 if (process.env.NODE_ENV !== 'production') {
   const PORT = Number(process.env.PORT ?? 3000);
   app.listen(PORT, () => {
     console.log(`SMS Gateway server running on http://localhost:${PORT}`);
+    console.log(`  Landing: http://localhost:${PORT}/`);
     console.log(`  Health:  http://localhost:${PORT}/health`);
     console.log(`  API:     http://localhost:${PORT}/api/v1/messages`);
   });
