@@ -1,6 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <uses-feature
+        android:name="android.hardware.telephony"
+        android:required="true" />
+
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.RECEIVE_MMS" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_WAP_PUSH" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
       android:name=".MainApplication"
@@ -11,6 +28,7 @@
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="${usesCleartextTraffic}"
       android:supportsRtl="true">
+
       <activity
         android:name=".MainActivity"
         android:label="@string/app_name"
@@ -23,5 +41,44 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
       </activity>
+
+      <!-- Foreground service to keep app alive in background -->
+      <service
+          android:name=".service.GatewayForegroundService"
+          android:foregroundServiceType="dataSync"
+          android:exported="false" />
+
+      <!-- Auto-start on device boot -->
+      <receiver
+          android:name=".boot.BootReceiver"
+          android:exported="true"
+          android:enabled="true">
+          <intent-filter>
+              <action android:name="android.intent.action.BOOT_COMPLETED" />
+              <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+              <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+          </intent-filter>
+      </receiver>
+
+      <!-- SMS send/delivery status callbacks -->
+      <receiver
+          android:name=".sms.SmsDeliveryReceiver"
+          android:exported="false">
+          <intent-filter>
+              <action android:name="com.smsgateapp.SMS_SENT" />
+              <action android:name="com.smsgateapp.SMS_DELIVERED" />
+          </intent-filter>
+      </receiver>
+
+      <!-- Receive incoming SMS -->
+      <receiver
+          android:name=".sms.IncomingSmsReceiver"
+          android:exported="true"
+          android:permission="android.permission.BROADCAST_SMS">
+          <intent-filter android:priority="999">
+              <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+          </intent-filter>
+      </receiver>
+
     </application>
 </manifest>
