@@ -10,7 +10,7 @@ const KEYS = {
 } as const;
 
 const defaults = {
-  cloud: (): CloudSettings => ({enabled: false, url: 'https://sms.capcom.me', login: '', password: ''}),
+  cloud: (): CloudSettings => ({enabled: false, url: 'https://sms-gate-app.vercel.app', login: '', password: ''}),
   localServer: (): LocalServerSettings => ({enabled: false, port: 8080, login: '', password: ''}),
   messages: (): MessagesSettings => ({trackDelivery: true, simNumber: 1, validUntil: 86400}),
   webhooks: (): Webhook[] => [],

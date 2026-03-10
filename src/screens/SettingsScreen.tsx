@@ -1,12 +1,14 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
   TextInput, Switch, TouchableOpacity,
-  Alert, ActivityIndicator,
+  Alert, ActivityIndicator, Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import {Colors, Typography, Spacing, Radius} from '../theme';
 import {Webhook} from '../types';
 import {useSettings} from '../hooks/useSettings';
+import {settingsStore} from '../modules/settings/SettingsStore';
+import {Encryption} from '../modules/crypto/Encryption';
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
@@ -122,6 +124,88 @@ function WebhookCard({
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
+// ─── Register Modal ───────────────────────────────────────────────────────────
+
+function RegisterModal({
+  serverUrl,
+  onSuccess,
+  onClose,
+}: {
+  serverUrl: string;
+  onSuccess: (login: string, password: string) => void;
+  onClose: () => void;
+}) {
+  const [name, setName]         = useState('');
+  const [login, setLogin]       = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading]   = useState(false);
+
+  const handleRegister = async () => {
+    if (!name || !login || !password) {
+      Alert.alert('Error', 'All fields are required.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`${serverUrl}/api/v1/auth/register`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name, login, password}),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Registration failed');
+      Alert.alert('Account Created', `Welcome, ${data.name}! Your credentials have been saved.`);
+      onSuccess(login, password);
+    } catch (e: any) {
+      Alert.alert('Registration Failed', e?.message ?? 'Could not connect to server.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        style={{flex: 1}}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.registerModal}>
+          <Text style={styles.registerTitle}>Create Account</Text>
+          <Text style={styles.registerSub}>Register this device on the relay server</Text>
+
+          <View style={styles.registerFields}>
+            <TextInput style={styles.registerInput} value={name} onChangeText={setName}
+              placeholder="Display name" placeholderTextColor={Colors.textMuted}
+              autoCapitalize="words" />
+            <TextInput style={styles.registerInput} value={login} onChangeText={setLogin}
+              placeholder="Username" placeholderTextColor={Colors.textMuted}
+              autoCapitalize="none" autoCorrect={false} />
+            <TextInput style={styles.registerInput} value={password} onChangeText={setPassword}
+              placeholder="Password (min 6 chars)" placeholderTextColor={Colors.textMuted}
+              secureTextEntry autoCapitalize="none" />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.registerBtn, loading && styles.saveBtnDisabled]}
+            onPress={handleRegister}
+            disabled={loading}>
+            {loading
+              ? <ActivityIndicator color={Colors.textInverse} size="small" />
+              : <Text style={styles.saveBtnText}>Create Account</Text>}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
+            <Text style={styles.cancelBtnText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
+
 export default function SettingsScreen() {
   const {
     cloud, setCloud,
@@ -132,7 +216,26 @@ export default function SettingsScreen() {
     loaded, save,
   } = useSettings();
 
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving]             = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
+  const [encKey, setEncKey]             = useState<string | null>(null);
+  const [encKeySaving, setEncKeySaving] = useState(false);
+
+  useEffect(() => {
+    settingsStore.loadEncryptionKey().then(setEncKey);
+  }, []);
+
+  const handleGenerateKey = async () => {
+    const newKey = Encryption.generateKey();
+    setEncKeySaving(true);
+    try {
+      await settingsStore.saveEncryptionKey(newKey);
+      setEncKey(newKey);
+      Alert.alert('Key Generated', 'A new encryption key has been saved. Keep it safe — messages encrypted with the old key cannot be read.');
+    } finally {
+      setEncKeySaving(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -176,9 +279,9 @@ export default function SettingsScreen() {
           />
         </SettingRow>
         {cloud.enabled && <>
-          <SettingRow label="Server URL" hint="Your SMS gateway cloud endpoint">
+          <SettingRow label="Server URL" hint="Your SMS gateway relay endpoint">
             <Field value={cloud.url ?? ''} onChangeText={v => setCloud(p => ({...p, url: v}))}
-              placeholder="https://api.yourdomain.com" url />
+              placeholder="https://sms-gate-app.vercel.app" url />
           </SettingRow>
           <SettingRow label="Login">
             <Field value={cloud.login ?? ''} onChangeText={v => setCloud(p => ({...p, login: v}))}
@@ -188,9 +291,27 @@ export default function SettingsScreen() {
             <Field value={cloud.password ?? ''} onChangeText={v => setCloud(p => ({...p, password: v}))}
               placeholder="••••••••" secure />
           </SettingRow>
+          {cloud.url ? (
+            <TouchableOpacity
+              style={styles.registerTrigger}
+              onPress={() => setShowRegister(true)}>
+              <Text style={styles.registerTriggerText}>No account yet? Create one</Text>
+            </TouchableOpacity>
+          ) : null}
         </>}
         {!cloud.enabled && <View style={styles.rowSpacer} />}
       </View>
+
+      {showRegister && cloud.url ? (
+        <RegisterModal
+          serverUrl={cloud.url}
+          onSuccess={(login, password) => {
+            setCloud(p => ({...p, login, password}));
+            setShowRegister(false);
+          }}
+          onClose={() => setShowRegister(false)}
+        />
+      ) : null}
 
       {/* ── Local HTTP Server ── */}
       <Section
@@ -258,6 +379,30 @@ export default function SettingsScreen() {
         </SettingRow>
       </View>
 
+      {/* ── Encryption ── */}
+      <Section
+        title="Encryption"
+        subtitle="AES-256 end-to-end encryption for outgoing messages"
+      />
+      <View style={styles.card}>
+        <SettingRow label="Encryption Key" hint="Generated locally, never leaves your device" last>
+          <TouchableOpacity
+            style={[styles.keyBtn, encKeySaving && styles.saveBtnDisabled]}
+            onPress={handleGenerateKey}
+            disabled={encKeySaving}>
+            {encKeySaving
+              ? <ActivityIndicator size="small" color={Colors.gold} />
+              : <Text style={styles.keyBtnText}>{encKey ? 'Regenerate' : 'Generate Key'}</Text>}
+          </TouchableOpacity>
+        </SettingRow>
+        {encKey ? (
+          <View style={styles.urlBox}>
+            <Text style={styles.urlLabel}>ACTIVE KEY</Text>
+            <Text style={styles.urlValue} selectable numberOfLines={1}>{encKey}</Text>
+          </View>
+        ) : null}
+      </View>
+
       {/* ── Webhooks ── */}
       <Section
         title="Webhooks"
@@ -315,10 +460,10 @@ const styles = StyleSheet.create({
     borderColor: Colors.surfaceBorder,
     overflow: 'hidden',
   },
-  row: {flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingVertical: 14, minHeight: 54},
+  row: {flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingVertical: 14, minHeight: 54, gap: 8},
   rowBorder: {borderBottomWidth: 1, borderBottomColor: Colors.surfaceBorder},
-  rowLeft: {flex: 1, gap: 2},
-  rowRight: {flex: 1, alignItems: 'flex-end'},
+  rowLeft: {flex: 1, gap: 2, flexShrink: 1},
+  rowRight: {flexShrink: 0, alignItems: 'flex-end', maxWidth: '55%'},
   rowLabel: {fontSize: Typography.sm, color: Colors.textPrimary, fontWeight: Typography.medium},
   rowHint: {fontSize: Typography.xs, color: Colors.textMuted},
   rowSpacer: {height: 4},
@@ -399,4 +544,55 @@ const styles = StyleSheet.create({
   },
   saveBtnDisabled: {opacity: 0.6},
   saveBtnText: {color: Colors.textInverse, fontWeight: Typography.bold, fontSize: Typography.base, letterSpacing: 0.3},
+
+  // Key button
+  keyBtn: {
+    borderWidth: 1,
+    borderColor: Colors.gold,
+    borderRadius: Radius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  keyBtnText: {fontSize: Typography.xs, color: Colors.gold, fontWeight: Typography.semibold},
+
+  // Register trigger
+  registerTrigger: {padding: Spacing.md, alignItems: 'center'},
+  registerTriggerText: {fontSize: Typography.sm, color: Colors.gold, fontWeight: Typography.medium},
+
+  // Register modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    padding: Spacing.md,
+  },
+  registerModal: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  registerTitle: {fontSize: Typography.lg, fontWeight: Typography.bold, color: Colors.textPrimary},
+  registerSub: {fontSize: Typography.sm, color: Colors.textMuted, marginBottom: Spacing.xs},
+  registerFields: {gap: Spacing.sm},
+  registerInput: {
+    backgroundColor: Colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder,
+    borderRadius: Radius.sm,
+    padding: Spacing.sm + 2,
+    fontSize: Typography.sm,
+    color: Colors.textPrimary,
+  },
+  registerBtn: {
+    backgroundColor: Colors.gold,
+    borderRadius: Radius.lg,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: Spacing.xs,
+  },
+  cancelBtn: {padding: 10, alignItems: 'center'},
+  cancelBtnText: {fontSize: Typography.sm, color: Colors.textMuted},
 });

@@ -5,6 +5,7 @@ import cors from 'cors';
 
 import messagesRouter from './routes/messages';
 import devicesRouter  from './routes/devices';
+import authRouter     from './routes/auth';
 import healthRouter   from './routes/health';
 
 const app = express();
@@ -17,6 +18,7 @@ app.use(express.json());
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 app.use('/api/v1/messages', messagesRouter);
+app.use('/api/v1/auth', authRouter);
 app.use('/api/v1', devicesRouter);
 app.use('/health', healthRouter);
 

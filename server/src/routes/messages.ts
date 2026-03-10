@@ -40,11 +40,15 @@ router.get('/pending', requireDevice, async (req: Request, res: Response) => {
 
   // Atomically claim up to 10 pending messages assigned to this device (or unassigned)
   // and mark them as Processed so no other device picks them up.
+  // Claim Pending messages OR Processed messages stuck for > 5 min (device crashed mid-send)
   const { rows } = await pool.query<{ id: string; phone_numbers: string; message: string; sim_number: number | null; is_encrypted: boolean }>(
     `WITH claimed AS (
        SELECT id FROM messages
-       WHERE  state = 'Pending'
-         AND (device_id IS NULL OR device_id = $1)
+       WHERE (
+         (state = 'Pending' AND (device_id IS NULL OR device_id = $1))
+         OR
+         (state = 'Processed' AND device_id = $1 AND updated_at < NOW() - INTERVAL '5 minutes')
+       )
        ORDER BY created_at ASC
        LIMIT  10
        FOR UPDATE SKIP LOCKED
@@ -74,8 +78,10 @@ router.get('/pending', requireDevice, async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/v1/messages ──────────────────────────────────────────────────────
-router.get('/', requireApiKey, async (_req: Request, res: Response) => {
-  const messages = await messageDb.list(50, 0);
+router.get('/', requireApiKey, async (req: Request, res: Response) => {
+  const limit  = Math.min(Number(req.query.limit)  || 50, 200);
+  const offset = Number(req.query.offset) || 0;
+  const messages = await messageDb.list(limit, offset);
   res.json(messages);
 });
 

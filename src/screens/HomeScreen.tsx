@@ -1,9 +1,12 @@
 import React, {useState} from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  Switch, ActivityIndicator, Alert, TouchableOpacity,
+  Switch, ActivityIndicator, Alert, TouchableOpacity, Dimensions,
 } from 'react-native';
 import {Colors, Typography, Spacing, Radius} from '../theme';
+
+const {width: SCREEN_W} = Dimensions.get('window');
+const STAT_CARD_W = (SCREEN_W - Spacing.md * 2 - 8) / 2;
 import {useStats} from '../hooks/useStats';
 import {useSettings} from '../hooks/useSettings';
 
@@ -232,8 +235,7 @@ const styles = StyleSheet.create({
   // Stats
   statsGrid: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
   statCard: {
-    flex: 1,
-    minWidth: '45%',
+    width: STAT_CARD_W,
     borderRadius: Radius.md,
     padding: Spacing.md,
     borderWidth: 1,

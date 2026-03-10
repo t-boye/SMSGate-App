@@ -1,3 +1,12 @@
+import {Dimensions, PixelRatio} from 'react-native';
+
+const {width: SCREEN_W} = Dimensions.get('window');
+
+// Scale font sizes relative to a 375px baseline (iPhone SE / mid-range Android)
+function fs(size: number): number {
+  return Math.round(PixelRatio.roundToNearestPixel(size * (SCREEN_W / 375)));
+}
+
 export const Colors = {
   // Backgrounds
   bg: '#0A0E1A',
@@ -28,20 +37,20 @@ export const Colors = {
 } as const;
 
 export const Typography = {
-  // Sizes
-  xs: 11,
-  sm: 13,
-  base: 15,
-  lg: 17,
-  xl: 20,
-  '2xl': 24,
-  '3xl': 30,
+  // Sizes — scaled to screen width
+  xs:   fs(11),
+  sm:   fs(13),
+  base: fs(15),
+  lg:   fs(17),
+  xl:   fs(20),
+  '2xl': fs(24),
+  '3xl': fs(30),
 
-  // Weights (React Native uses string for fontWeight)
-  regular: '400' as const,
-  medium: '500' as const,
+  // Weights
+  regular:  '400' as const,
+  medium:   '500' as const,
   semibold: '600' as const,
-  bold: '700' as const,
+  bold:     '700' as const,
 } as const;
 
 export const Spacing = {
@@ -58,3 +67,7 @@ export const Radius = {
   lg: 16,
   full: 999,
 } as const;
+
+// Responsive helpers
+export const isSmallScreen = SCREEN_W < 360;
+export const screenWidth   = SCREEN_W;

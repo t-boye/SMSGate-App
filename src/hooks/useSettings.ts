@@ -8,13 +8,14 @@ import {startHttpServer, stopHttpServer} from '../modules/server/HttpServer';
 const {ServiceManager: NativeServiceManager} = NativeModules;
 
 export function useSettings() {
-  const [cloud, setCloud] = useState<CloudSettings>({enabled: false, url: 'https://sms.capcom.me', login: '', password: ''});
+  const [cloud, setCloud] = useState<CloudSettings>({enabled: false, url: 'https://sms-gate-app.vercel.app', login: '', password: ''});
   const [localServer, setLocalServer] = useState<LocalServerSettings>({enabled: false, port: 8080, login: '', password: ''});
   const [messages, setMessages] = useState<MessagesSettings>({trackDelivery: true, simNumber: 1, validUntil: 86400});
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
   const [serverUrl, setServerUrl] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
+  const serverRunningRef = useRef(false);
   const stateRef = useRef({cloud, localServer, messages, webhooks});
   useEffect(() => {
     stateRef.current = {cloud, localServer, messages, webhooks};
@@ -34,10 +35,14 @@ export function useSettings() {
       setWebhooks(w);
 
       // Restore server URL if local server was previously enabled
-      if (l.enabled) {
+      if (l.enabled && !serverRunningRef.current) {
+        serverRunningRef.current = true;
         startHttpServer(l.port, l.login ?? '', l.password ?? '')
           .then(url => setServerUrl(url))
-          .catch(e => console.warn('[useSettings] Failed to restore local server:', e));
+          .catch(e => {
+            serverRunningRef.current = false;
+            console.warn('[useSettings] Failed to restore local server:', e);
+          });
       }
 
       setLoaded(true);
@@ -63,9 +68,11 @@ export function useSettings() {
     if (c.enabled) await cloudClient.connect();
 
     if (l.enabled) {
+      serverRunningRef.current = true;
       const url = await startHttpServer(l.port, l.login ?? '', l.password ?? '');
       setServerUrl(url);
     } else {
+      serverRunningRef.current = false;
       await stopHttpServer();
       setServerUrl(null);
     }

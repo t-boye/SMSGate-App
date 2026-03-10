@@ -59,7 +59,14 @@ class CloudClient {
         return;
       }
 
-      const jobs: PendingJob[] = await res.json();
+      let jobs: PendingJob[];
+      try {
+        jobs = await res.json();
+      } catch {
+        console.warn('[CloudClient] Invalid JSON from server');
+        this._schedulePoll(this.pollInterval);
+        return;
+      }
 
       // Process each job in parallel
       await Promise.all(
