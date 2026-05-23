@@ -152,7 +152,7 @@ function RegisterModal({
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({name, login, password}),
       });
-      const data = await res.json();
+      const data = await res.json() as any;
       if (!res.ok) throw new Error(data.error ?? 'Registration failed');
       Alert.alert('Account Created', `Welcome, ${data.name}! Your credentials have been saved.`);
       onSuccess(login, password);

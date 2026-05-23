@@ -20,7 +20,7 @@ class MessageStore {
       this.db = open({name: DB_NAME});
       const db = this.db;
 
-      db.execute(`
+      db.executeSync(`
         CREATE TABLE IF NOT EXISTS messages (
           id          TEXT PRIMARY KEY,
           body        TEXT NOT NULL,
@@ -32,7 +32,7 @@ class MessageStore {
           source      TEXT DEFAULT 'local'
         )
       `);
-      db.execute(`
+      db.executeSync(`
         CREATE TABLE IF NOT EXISTS recipients (
           id           TEXT PRIMARY KEY,
           message_id   TEXT NOT NULL,
@@ -44,8 +44,8 @@ class MessageStore {
           FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
         )
       `);
-      db.execute(`CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at DESC)`);
-      db.execute(`CREATE INDEX IF NOT EXISTS idx_recipients_message ON recipients(message_id)`);
+      db.executeSync(`CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at DESC)`);
+      db.executeSync(`CREATE INDEX IF NOT EXISTS idx_recipients_message ON recipients(message_id)`);
     } catch (e) {
       console.error('[MessageStore] Initialization failed:', e);
       throw e;
@@ -61,7 +61,7 @@ class MessageStore {
     source?: 'local' | 'cloud' | 'http';
   }): void {
     const now = Date.now();
-    this.ensureDb().execute(
+    this.ensureDb().executeSync(
       `INSERT OR REPLACE INTO messages (id, body, state, sim_number, is_encrypted, created_at, updated_at, source)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [msg.id, msg.body, msg.state ?? 'Pending', msg.simNumber ?? 1,
@@ -70,7 +70,7 @@ class MessageStore {
   }
 
   insertRecipient(r: {id: string; messageId: string; phone: string; state?: MessageState}): void {
-    this.ensureDb().execute(
+    this.ensureDb().executeSync(
       `INSERT OR REPLACE INTO recipients (id, message_id, phone, state) VALUES (?, ?, ?, ?)`,
       [r.id, r.messageId, r.phone, r.state ?? 'Pending'],
     );
@@ -80,23 +80,23 @@ class MessageStore {
     const db = this.ensureDb();
     const now = Date.now();
     if (state === 'Sent') {
-      db.execute(`UPDATE recipients SET state=?, error=?, sent_at=? WHERE id=?`,
+      db.executeSync(`UPDATE recipients SET state=?, error=?, sent_at=? WHERE id=?`,
         [state, error ?? null, now, recipientId]);
     } else if (state === 'Delivered') {
-      db.execute(`UPDATE recipients SET state=?, delivered_at=? WHERE id=?`,
+      db.executeSync(`UPDATE recipients SET state=?, delivered_at=? WHERE id=?`,
         [state, now, recipientId]);
     } else {
-      db.execute(`UPDATE recipients SET state=?, error=? WHERE id=?`,
+      db.executeSync(`UPDATE recipients SET state=?, error=? WHERE id=?`,
         [state, error ?? null, recipientId]);
     }
-    const result = db.execute(`SELECT message_id FROM recipients WHERE id=?`, [recipientId]);
+    const result = db.executeSync(`SELECT message_id FROM recipients WHERE id=?`, [recipientId]);
     const messageId = result.rows?.[0]?.message_id as string | undefined;
     if (messageId) this.recomputeMessageState(messageId);
   }
 
   recomputeMessageState(messageId: string): void {
     const db = this.ensureDb();
-    const result = db.execute(`SELECT state FROM recipients WHERE message_id=?`, [messageId]);
+    const result = db.executeSync(`SELECT state FROM recipients WHERE message_id=?`, [messageId]);
     const states = (result.rows ?? []).map((r: any) => r.state as MessageState);
     let overall: MessageState = 'Pending';
     if (states.length > 0) {
@@ -105,17 +105,17 @@ class MessageStore {
       else if (states.some(s => s === 'Delivered' || s === 'Sent')) overall = 'Sent';
       else if (states.some(s => s === 'Failed')) overall = 'Failed';
     }
-    db.execute(`UPDATE messages SET state=?, updated_at=? WHERE id=?`,
+    db.executeSync(`UPDATE messages SET state=?, updated_at=? WHERE id=?`,
       [overall, Date.now(), messageId]);
   }
 
   getMessage(id: string): Message | null {
     const db = this.ensureDb();
-    const msgResult = db.execute(`SELECT * FROM messages WHERE id=?`, [id]);
+    const msgResult = db.executeSync(`SELECT * FROM messages WHERE id=?`, [id]);
     const row = msgResult.rows?.[0];
     if (!row) return null;
 
-    const recResult = db.execute(
+    const recResult = db.executeSync(
       `SELECT * FROM recipients WHERE message_id=? ORDER BY rowid`, [id]);
     const recipients: MessageRecipient[] = (recResult.rows ?? []).map((r: any) => ({
       id: r.id,
@@ -126,21 +126,22 @@ class MessageStore {
       deliveredAt: r.delivered_at ?? undefined,
     }));
 
+    const r = row as any;
     return {
-      id: row.id,
-      message: row.body,
-      phoneNumbers: recipients.map(r => r.phoneNumber),
+      id: r.id as string,
+      message: r.body as string,
+      phoneNumbers: recipients.map(rec => rec.phoneNumber),
       recipients,
-      state: row.state as MessageState,
-      createdAt: new Date(Number(row.created_at)).toISOString(),
-      isEncrypted: row.is_encrypted === 1,
-      simNumber: row.sim_number,
-      source: row.source,
+      state: r.state as MessageState,
+      createdAt: new Date(Number(r.created_at)).toISOString(),
+      isEncrypted: r.is_encrypted === 1,
+      simNumber: r.sim_number ?? undefined,
+      source: r.source ?? undefined,
     };
   }
 
   listMessages(limit: number = 50, offset: number = 0): Message[] {
-    const result = this.ensureDb().execute(
+    const result = this.ensureDb().executeSync(
       `SELECT id FROM messages ORDER BY created_at DESC LIMIT ? OFFSET ?`, [limit, offset]);
     return (result.rows ?? [])
       .map((r: any) => this.getMessage(r.id as string))
@@ -148,7 +149,7 @@ class MessageStore {
   }
 
   getStats() {
-    const result = this.ensureDb().execute(
+    const result = this.ensureDb().executeSync(
       `SELECT state, COUNT(*) as cnt FROM messages GROUP BY state`);
     const stats = {pending: 0, processed: 0, sent: 0, delivered: 0, failed: 0};
     for (const row of result.rows ?? []) {

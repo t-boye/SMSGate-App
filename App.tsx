@@ -1,5 +1,5 @@
-import React, {useEffect, useRef} from 'react';
-import {StatusBar, NativeModules, Alert, Platform} from 'react-native';
+import React, {useEffect, useRef, Component} from 'react';
+import {StatusBar, NativeModules, Alert, Platform, View, Text, ScrollView, StyleSheet} from 'react-native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import AppNavigator from './src/navigation/AppNavigator';
 import {messageStore} from './src/modules/storage/MessageStore';
@@ -9,6 +9,35 @@ import {cloudClient} from './src/modules/cloud/CloudClient';
 import {startHttpServer} from './src/modules/server/HttpServer';
 
 const {ServiceManager: NativeServiceManager} = NativeModules;
+
+class ErrorBoundary extends Component<
+  {children: React.ReactNode},
+  {error: string | null}
+> {
+  state = {error: null};
+  static getDerivedStateFromError(e: any) {
+    return {error: String(e?.message ?? e)};
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={eb.container}>
+          <Text style={eb.title}>Startup Error</Text>
+          <ScrollView>
+            <Text style={eb.msg} selectable>{this.state.error}</Text>
+          </ScrollView>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const eb = StyleSheet.create({
+  container: {flex: 1, backgroundColor: '#0A0E1A', padding: 24, justifyContent: 'center'},
+  title: {color: '#EF4444', fontSize: 18, fontWeight: '700', marginBottom: 16},
+  msg: {color: '#F1F5F9', fontSize: 13, fontFamily: 'monospace', lineHeight: 20},
+});
 
 async function requestPermissions(): Promise<void> {
   if (Platform.OS !== 'android') return;
@@ -40,27 +69,21 @@ async function requestPermissions(): Promise<void> {
   }
 }
 
-export default function App() {
+function AppInner() {
   const stopListeningRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     async function init() {
       try {
-        // 1. Request SMS + notification permissions
         await requestPermissions();
-
-        // 2. Initialize SQLite (synchronous)
         messageStore.initialize();
 
-        // 3. Start foreground service (keeps app alive in background)
         if (NativeServiceManager) {
           await NativeServiceManager.startForegroundService();
         }
 
-        // 4. Start listening for incoming SMS + delivery events
         stopListeningRef.current = startListening();
 
-        // 5. Restore saved server + cloud settings
         const [cloudSettings, localSettings] = await Promise.all([
           settingsStore.loadCloud(),
           settingsStore.loadLocalServer(),
@@ -79,7 +102,8 @@ export default function App() {
             console.warn('[App] Cloud connection failed:', e),
           );
         }
-      } catch (e) {
+      } catch (e: any) {
+        Alert.alert('Startup Error', String(e?.message ?? e));
         console.error('[App] Initialization error:', e);
       }
     }
@@ -97,5 +121,13 @@ export default function App() {
       <StatusBar barStyle="light-content" backgroundColor="#111827" translucent={false} />
       <AppNavigator />
     </SafeAreaProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppInner />
+    </ErrorBoundary>
   );
 }

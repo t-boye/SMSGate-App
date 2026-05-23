@@ -61,7 +61,7 @@ class CloudClient {
 
       let jobs: PendingJob[];
       try {
-        jobs = await res.json();
+        jobs = (await res.json()) as PendingJob[];
       } catch {
         console.warn('[CloudClient] Invalid JSON from server');
         this._schedulePoll(this.pollInterval);
