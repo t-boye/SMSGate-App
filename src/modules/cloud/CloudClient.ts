@@ -13,7 +13,8 @@ type PendingJob = {
 };
 
 function toBase64(str: string): string {
-  return Buffer.from(str, 'utf8').toString('base64');
+  // btoa is available in Hermes (RN 0.71+); Buffer is Node-only and not available
+  return btoa(str);
 }
 
 function buildHeaders(settings: CloudSettings): Record<string, string> {
