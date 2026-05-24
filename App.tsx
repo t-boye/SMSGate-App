@@ -76,7 +76,7 @@ function AppInner() {
     async function init() {
       try {
         await requestPermissions();
-        messageStore.initialize();
+        await messageStore.initialize();
 
         if (NativeServiceManager) {
           await NativeServiceManager.startForegroundService();
@@ -97,11 +97,7 @@ function AppInner() {
           ).catch(e => console.warn('[App] Local server failed to start:', e));
         }
 
-        if (cloudSettings.enabled) {
-          cloudClient.connect().catch(e =>
-            console.warn('[App] Cloud connection failed:', e),
-          );
-        }
+        cloudClient.connect();
       } catch (e: any) {
         Alert.alert('Startup Error', String(e?.message ?? e));
         console.error('[App] Initialization error:', e);

@@ -226,12 +226,14 @@ export default function SettingsScreen() {
   }, []);
 
   const handleGenerateKey = async () => {
-    const newKey = Encryption.generateKey();
     setEncKeySaving(true);
     try {
+      const newKey = Encryption.generateKey();
       await settingsStore.saveEncryptionKey(newKey);
       setEncKey(newKey);
       Alert.alert('Key Generated', 'A new encryption key has been saved. Keep it safe — messages encrypted with the old key cannot be read.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Failed to generate key.');
     } finally {
       setEncKeySaving(false);
     }

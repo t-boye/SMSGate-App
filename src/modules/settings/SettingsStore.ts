@@ -10,7 +10,7 @@ const KEYS = {
 } as const;
 
 const defaults = {
-  cloud: (): CloudSettings => ({enabled: false, url: 'https://sms-gate-app.vercel.app', login: '', password: ''}),
+  cloud: (): CloudSettings => ({enabled: true, url: 'https://sms-gate-app.vercel.app', login: '', password: ''}),
   localServer: (): LocalServerSettings => ({enabled: false, port: 8080, login: '', password: ''}),
   messages: (): MessagesSettings => ({trackDelivery: true, simNumber: 1, validUntil: 86400}),
   webhooks: (): Webhook[] => [],
@@ -19,7 +19,9 @@ const defaults = {
 async function load<T>(key: string, fallback: () => T): Promise<T> {
   try {
     const raw = await AsyncStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback();
+    if (!raw) return fallback();
+    // Merge: defaults fill in any fields missing from saved data
+    return {...fallback(), ...(JSON.parse(raw) as T)};
   } catch {
     return fallback();
   }

@@ -1,55 +1,40 @@
-import {open} from '@op-engineering/op-sqlite';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Message, MessageState, MessageRecipient} from '../../types';
 
-type DB = ReturnType<typeof open>;
+const STORAGE_KEY = 'smsgate:messages';
+const MAX_MESSAGES = 500;
 
-const DB_NAME = 'smsgateway.db';
+interface StoredMessage extends Message {
+  recipients: MessageRecipient[];
+}
 
 class MessageStore {
-  private db: DB | null = null;
+  private messages: Map<string, StoredMessage> = new Map();
+  private orderedIds: string[] = [];
 
-  private ensureDb(): DB {
-    if (!this.db) {
-      throw new Error('[MessageStore] Not initialized — call initialize() first');
+  async initialize(): Promise<void> {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const list: StoredMessage[] = JSON.parse(raw);
+        for (const msg of list) {
+          this.messages.set(msg.id, msg);
+        }
+        this.orderedIds = list.map(m => m.id);
+      }
+    } catch (e) {
+      console.error('[MessageStore] Failed to load from storage:', e);
     }
-    return this.db;
   }
 
-  initialize(): void {
-    try {
-      this.db = open({name: DB_NAME});
-      const db = this.db;
-
-      db.executeSync(`
-        CREATE TABLE IF NOT EXISTS messages (
-          id          TEXT PRIMARY KEY,
-          body        TEXT NOT NULL,
-          state       TEXT NOT NULL DEFAULT 'Pending',
-          sim_number  INTEGER DEFAULT 1,
-          is_encrypted INTEGER DEFAULT 0,
-          created_at  INTEGER NOT NULL,
-          updated_at  INTEGER NOT NULL,
-          source      TEXT DEFAULT 'local'
-        )
-      `);
-      db.executeSync(`
-        CREATE TABLE IF NOT EXISTS recipients (
-          id           TEXT PRIMARY KEY,
-          message_id   TEXT NOT NULL,
-          phone        TEXT NOT NULL,
-          state        TEXT NOT NULL DEFAULT 'Pending',
-          error        TEXT,
-          sent_at      INTEGER,
-          delivered_at INTEGER,
-          FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
-        )
-      `);
-      db.executeSync(`CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at DESC)`);
-      db.executeSync(`CREATE INDEX IF NOT EXISTS idx_recipients_message ON recipients(message_id)`);
-    } catch (e) {
-      console.error('[MessageStore] Initialization failed:', e);
-      throw e;
-    }
+  private persist(): void {
+    const list = this.orderedIds
+      .slice(0, MAX_MESSAGES)
+      .map(id => this.messages.get(id))
+      .filter(Boolean) as StoredMessage[];
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(list)).catch(e =>
+      console.error('[MessageStore] Failed to save:', e),
+    );
   }
 
   insertMessage(msg: {
@@ -60,44 +45,68 @@ class MessageStore {
     isEncrypted?: boolean;
     source?: 'local' | 'cloud' | 'http';
   }): void {
-    const now = Date.now();
-    this.ensureDb().executeSync(
-      `INSERT OR REPLACE INTO messages (id, body, state, sim_number, is_encrypted, created_at, updated_at, source)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [msg.id, msg.body, msg.state ?? 'Pending', msg.simNumber ?? 1,
-       msg.isEncrypted ? 1 : 0, now, now, msg.source ?? 'local'],
-    );
+    const now = new Date().toISOString();
+    const existing = this.messages.get(msg.id);
+    const stored: StoredMessage = {
+      id: msg.id,
+      message: msg.body,
+      phoneNumbers: existing?.phoneNumbers ?? [],
+      recipients: existing?.recipients ?? [],
+      state: msg.state ?? 'Pending',
+      createdAt: existing?.createdAt ?? now,
+      isEncrypted: msg.isEncrypted ?? false,
+      simNumber: msg.simNumber,
+      source: msg.source ?? 'local',
+    };
+    if (!existing) {
+      this.orderedIds.unshift(msg.id);
+      if (this.orderedIds.length > MAX_MESSAGES) {
+        const removed = this.orderedIds.pop();
+        if (removed) this.messages.delete(removed);
+      }
+    }
+    this.messages.set(msg.id, stored);
+    this.persist();
   }
 
   insertRecipient(r: {id: string; messageId: string; phone: string; state?: MessageState}): void {
-    this.ensureDb().executeSync(
-      `INSERT OR REPLACE INTO recipients (id, message_id, phone, state) VALUES (?, ?, ?, ?)`,
-      [r.id, r.messageId, r.phone, r.state ?? 'Pending'],
-    );
+    const msg = this.messages.get(r.messageId);
+    if (!msg) return;
+    const existingIdx = msg.recipients.findIndex(rec => rec.id === r.id);
+    const recipient: MessageRecipient = {
+      id: r.id,
+      phoneNumber: r.phone,
+      state: r.state ?? 'Pending',
+    };
+    if (existingIdx >= 0) {
+      msg.recipients[existingIdx] = recipient;
+    } else {
+      msg.recipients.push(recipient);
+    }
+    msg.phoneNumbers = msg.recipients.map(rec => rec.phoneNumber);
+    this.persist();
   }
 
   updateRecipientState(recipientId: string, state: MessageState, error?: string): void {
-    const db = this.ensureDb();
-    const now = Date.now();
-    if (state === 'Sent') {
-      db.executeSync(`UPDATE recipients SET state=?, error=?, sent_at=? WHERE id=?`,
-        [state, error ?? null, now, recipientId]);
-    } else if (state === 'Delivered') {
-      db.executeSync(`UPDATE recipients SET state=?, delivered_at=? WHERE id=?`,
-        [state, now, recipientId]);
-    } else {
-      db.executeSync(`UPDATE recipients SET state=?, error=? WHERE id=?`,
-        [state, error ?? null, recipientId]);
+    for (const msg of this.messages.values()) {
+      const idx = msg.recipients.findIndex(r => r.id === recipientId);
+      if (idx >= 0) {
+        const rec = msg.recipients[idx];
+        rec.state = state;
+        if (error !== undefined) rec.error = error;
+        if (state === 'Sent') rec.sentAt = Date.now();
+        if (state === 'Delivered') rec.deliveredAt = Date.now();
+        this.recomputeMessageState(msg.id);
+        this.persist();
+        return;
+      }
     }
-    const result = db.executeSync(`SELECT message_id FROM recipients WHERE id=?`, [recipientId]);
-    const messageId = result.rows?.[0]?.message_id as string | undefined;
-    if (messageId) this.recomputeMessageState(messageId);
   }
 
   recomputeMessageState(messageId: string): void {
-    const db = this.ensureDb();
-    const result = db.executeSync(`SELECT state FROM recipients WHERE message_id=?`, [messageId]);
-    const states = (result.rows ?? []).map((r: any) => r.state as MessageState);
+    const msg = this.messages.get(messageId);
+    if (!msg) return;
+    const states = msg.recipients.map(r => r.state);
     let overall: MessageState = 'Pending';
     if (states.length > 0) {
       if (states.every(s => s === 'Delivered')) overall = 'Delivered';
@@ -105,57 +114,27 @@ class MessageStore {
       else if (states.some(s => s === 'Delivered' || s === 'Sent')) overall = 'Sent';
       else if (states.some(s => s === 'Failed')) overall = 'Failed';
     }
-    db.executeSync(`UPDATE messages SET state=?, updated_at=? WHERE id=?`,
-      [overall, Date.now(), messageId]);
+    msg.state = overall;
   }
 
   getMessage(id: string): Message | null {
-    const db = this.ensureDb();
-    const msgResult = db.executeSync(`SELECT * FROM messages WHERE id=?`, [id]);
-    const row = msgResult.rows?.[0];
-    if (!row) return null;
-
-    const recResult = db.executeSync(
-      `SELECT * FROM recipients WHERE message_id=? ORDER BY rowid`, [id]);
-    const recipients: MessageRecipient[] = (recResult.rows ?? []).map((r: any) => ({
-      id: r.id,
-      phoneNumber: r.phone,
-      state: r.state as MessageState,
-      error: r.error ?? undefined,
-      sentAt: r.sent_at ?? undefined,
-      deliveredAt: r.delivered_at ?? undefined,
-    }));
-
-    const r = row as any;
-    return {
-      id: r.id as string,
-      message: r.body as string,
-      phoneNumbers: recipients.map(rec => rec.phoneNumber),
-      recipients,
-      state: r.state as MessageState,
-      createdAt: new Date(Number(r.created_at)).toISOString(),
-      isEncrypted: r.is_encrypted === 1,
-      simNumber: r.sim_number ?? undefined,
-      source: r.source ?? undefined,
-    };
+    const msg = this.messages.get(id);
+    if (!msg) return null;
+    return {...msg};
   }
 
   listMessages(limit: number = 50, offset: number = 0): Message[] {
-    const result = this.ensureDb().executeSync(
-      `SELECT id FROM messages ORDER BY created_at DESC LIMIT ? OFFSET ?`, [limit, offset]);
-    return (result.rows ?? [])
-      .map((r: any) => this.getMessage(r.id as string))
+    return this.orderedIds
+      .slice(offset, offset + limit)
+      .map(id => this.getMessage(id))
       .filter(Boolean) as Message[];
   }
 
   getStats() {
-    const result = this.ensureDb().executeSync(
-      `SELECT state, COUNT(*) as cnt FROM messages GROUP BY state`);
     const stats = {pending: 0, processed: 0, sent: 0, delivered: 0, failed: 0};
-    for (const row of result.rows ?? []) {
-      const state = String((row as any).state ?? '').toLowerCase();
-      const cnt = Number((row as any).cnt ?? 0);
-      if (state in stats) (stats as any)[state] = cnt;
+    for (const msg of this.messages.values()) {
+      const state = msg.state.toLowerCase() as keyof typeof stats;
+      if (state in stats) stats[state]++;
     }
     return stats;
   }

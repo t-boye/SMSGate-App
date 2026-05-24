@@ -28,12 +28,14 @@ function buildHeaders(settings: CloudSettings): Record<string, string> {
 
 class CloudClient {
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
-  private pollInterval = 5000; // ms between polls
-  private running = false;
+  private pollInterval = 5000;
 
-  async connect(): Promise<void> {
-    this.running = true;
-    this._schedulePoll(0); // poll immediately on connect
+  constructor() {
+    this._schedulePoll(3000);
+  }
+
+  connect(): void {
+    this._schedulePoll(0);
   }
 
   private _schedulePoll(delay: number): void {
@@ -42,55 +44,42 @@ class CloudClient {
   }
 
   private async _poll(): Promise<void> {
-    if (!this.running) return;
-
     try {
       const settings = await settingsStore.loadCloud();
-      if (!settings.enabled || !settings.url) return;
 
-      const headers = buildHeaders(settings);
+      const hasAuth = (settings.login && settings.password) || settings.token;
+      if (settings.enabled && settings.url && hasAuth) {
+        const headers = buildHeaders(settings);
+        const res = await fetch(`${settings.url}/api/v1/messages/pending`, {headers});
 
-      // Fetch pending jobs claimed for this device
-      const res = await fetch(`${settings.url}/api/v1/messages/pending`, {headers});
+        if (res.ok) {
+          let jobs: PendingJob[];
+          try { jobs = (await res.json()) as PendingJob[]; } catch { jobs = []; }
 
-      if (!res.ok) {
-        console.warn('[CloudClient] Poll failed:', res.status);
-        this._schedulePoll(this.pollInterval);
-        return;
+          await Promise.all(jobs.map(async job => {
+            if (job.type !== 'send') return;
+            try {
+              messageStore.insertMessage({
+                id: job.id,
+                body: job.message,
+                isEncrypted: job.isEncrypted,
+                source: 'cloud',
+              });
+              await sendSms({
+                messageId: job.id,
+                phoneNumbers: job.phoneNumbers,
+                body: job.message,
+                simSlot: job.simNumber ? job.simNumber - 1 : undefined,
+              });
+              await this._reportStatus(job.id, settings);
+            } catch (e) {
+              console.error('[CloudClient] Job failed:', e);
+            }
+          }));
+        } else {
+          console.error('[CloudClient] Poll failed:', res.status);
+        }
       }
-
-      let jobs: PendingJob[];
-      try {
-        jobs = (await res.json()) as PendingJob[];
-      } catch {
-        console.warn('[CloudClient] Invalid JSON from server');
-        this._schedulePoll(this.pollInterval);
-        return;
-      }
-
-      // Process each job in parallel
-      await Promise.all(
-        jobs.map(async job => {
-          if (job.type !== 'send') return;
-          try {
-            messageStore.insertMessage({
-              id: job.id,
-              body: job.message,
-              isEncrypted: job.isEncrypted,
-              source: 'cloud',
-            });
-            await sendSms({
-              messageId: job.id,
-              phoneNumbers: job.phoneNumbers,
-              body: job.message,
-              simSlot: job.simNumber ? job.simNumber - 1 : undefined,
-            });
-            await this._reportStatus(job.id, settings);
-          } catch (e) {
-            console.error('[CloudClient] Job processing failed:', e);
-          }
-        }),
-      );
     } catch (e) {
       console.warn('[CloudClient] Poll error:', e);
     }
@@ -114,7 +103,6 @@ class CloudClient {
   }
 
   disconnect(): void {
-    this.running = false;
     if (this.pollTimer) clearTimeout(this.pollTimer);
     this.pollTimer = null;
   }
