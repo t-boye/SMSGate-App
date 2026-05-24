@@ -8,6 +8,23 @@ function generateId(): string {
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
+// Dedup cache: prevents duplicate webhook dispatches when Android re-delivers
+// the same SMS broadcast (e.g. dual-SIM, ordered broadcast retry).
+const recentSmsKeys = new Map<string, number>();
+const DEDUP_TTL_MS = 30_000;
+
+function isDuplicate(from: string, timestamp: number): boolean {
+  const key = `${from}__${timestamp}`;
+  const now = Date.now();
+  // Evict stale entries
+  for (const [k, t] of recentSmsKeys) {
+    if (now - t > DEDUP_TTL_MS) recentSmsKeys.delete(k);
+  }
+  if (recentSmsKeys.has(key)) return true;
+  recentSmsKeys.set(key, now);
+  return false;
+}
+
 export function startListening(): () => void {
   if (!NativeSmsReceiver) {
     console.warn('[SmsReceiver] Native module not available — SMS receiving disabled');
@@ -20,6 +37,7 @@ export function startListening(): () => void {
     'onSmsReceived',
     async (event: {from: string; body: string; timestamp: number}) => {
       try {
+        if (isDuplicate(event.from, event.timestamp)) return;
         const id = generateId();
         const recipientId = generateId();
         messageStore.insertMessage({id, body: event.body, state: 'Delivered', source: 'local'});
