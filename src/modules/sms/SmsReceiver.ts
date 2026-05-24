@@ -37,7 +37,7 @@ export function startListening(): () => void {
 
   const deliverySubscription = emitter.addListener(
     'onDeliveryUpdate',
-    (event: {
+    async (event: {
       messageId: string;
       recipientId: string;
       status: 'sent' | 'delivered' | 'failed';
@@ -47,6 +47,20 @@ export function startListening(): () => void {
         const stateMap = {sent: 'Sent', delivered: 'Delivered', failed: 'Failed'} as const;
         const state = stateMap[event.status] ?? 'Failed';
         messageStore.updateRecipientState(event.recipientId, state, event.error);
+
+        const webhookEvent =
+          event.status === 'delivered' ? 'sms:delivered' :
+          event.status === 'failed'    ? 'sms:failed'    : null;
+        if (webhookEvent) {
+          const msg = messageStore.getMessage(event.messageId);
+          const recipient = msg?.recipients.find(r => r.id === event.recipientId);
+          await webhookDispatcher.dispatch(webhookEvent, {
+            messageId: event.messageId,
+            phone: recipient?.phoneNumber,
+            status: event.status,
+            error: event.error,
+          });
+        }
       } catch (e) {
         console.error('[SmsReceiver] Error handling delivery update:', e);
       }
