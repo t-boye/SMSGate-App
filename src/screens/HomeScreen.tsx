@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import {
-  View, Text, StyleSheet, ScrollView,
+  View, Text, Image, StyleSheet, ScrollView,
   Switch, ActivityIndicator, Alert, TouchableOpacity, Dimensions,
 } from 'react-native';
 import {Colors, Typography, Spacing, Radius} from '../theme';
@@ -106,6 +106,11 @@ export default function HomeScreen() {
       {/* ── Header Banner ── */}
       <View style={styles.banner}>
         <View style={styles.bannerLeft}>
+          <Image
+            source={require('../assets/logo.png')}
+            style={styles.bannerLogo}
+            resizeMode="contain"
+          />
           <Text style={styles.bannerLabel}>TOTAL MESSAGES</Text>
           <Text style={styles.bannerValue}>{total}</Text>
         </View>
@@ -214,6 +219,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bannerLeft: {flex: 1},
+  bannerLogo: {height: 44, width: 110, marginBottom: 6},
   bannerLabel: {fontSize: Typography.xs, fontWeight: Typography.semibold, color: Colors.textMuted, letterSpacing: 1.2},
   bannerValue: {fontSize: Typography['3xl'], fontWeight: Typography.bold, color: Colors.gold, marginTop: 2},
   bannerDivider: {width: 1, height: 40, backgroundColor: Colors.surfaceBorder, marginHorizontal: Spacing.md},
