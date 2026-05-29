@@ -4,8 +4,6 @@ import {settingsStore} from '../settings/SettingsStore';
 import {webhookDispatcher} from '../webhook/WebhookDispatcher';
 import {Encryption} from '../crypto/Encryption';
 
-const {SmsSender: NativeSmsSender} = NativeModules;
-
 function generateId(): string {
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -17,6 +15,8 @@ export async function sendSms(params: {
   simSlot?: number;
   isEncrypted?: boolean;
 }): Promise<void> {
+  // Access at call time so new-arch interop layer has finished registering modules
+  const NativeSmsSender = NativeModules.SmsSender;
   if (!NativeSmsSender) {
     throw new Error('SmsSender native module not available');
   }
@@ -72,6 +72,7 @@ export async function sendSms(params: {
 }
 
 export async function getSimCards(): Promise<any[]> {
+  const NativeSmsSender = NativeModules.SmsSender;
   if (!NativeSmsSender) return [];
   return NativeSmsSender.getSimCards();
 }
