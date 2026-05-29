@@ -60,19 +60,23 @@ class CloudClient {
           await Promise.all(jobs.map(async job => {
             if (job.type !== 'send') return;
             try {
+              console.log('[CloudClient] step1 insertMessage', job.id);
               messageStore.insertMessage({
                 id: job.id,
                 body: job.message,
                 isEncrypted: job.isEncrypted,
                 source: 'cloud',
               });
+              console.log('[CloudClient] step2 sendSms', typeof sendSms);
               await sendSms({
                 messageId: job.id,
                 phoneNumbers: job.phoneNumbers,
                 body: job.message,
                 simSlot: job.simNumber ? job.simNumber - 1 : undefined,
               });
+              console.log('[CloudClient] step3 reportStatus');
               await this._reportStatus(job.id, settings);
+              console.log('[CloudClient] step4 done', job.id);
             } catch (e) {
               console.error('[CloudClient] Job failed:', e);
             }
