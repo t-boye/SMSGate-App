@@ -75,6 +75,19 @@ class CloudClient {
               await this._reportStatus(job.id, settings);
             } catch (e) {
               console.error('[CloudClient] Job failed:', e);
+              // Report failure back so it shows as Failed on the server instead of staying Pending
+              try {
+                const msg = messageStore.getMessage(job.id);
+                if (!msg) {
+                  // Message wasn't inserted yet — insert it as Failed so server gets a state
+                  messageStore.insertMessage({id: job.id, body: job.message, state: 'Failed', source: 'cloud'});
+                }
+                for (const phone of job.phoneNumbers) {
+                  const rid = `${job.id}_fail`;
+                  messageStore.insertRecipient({id: rid, messageId: job.id, phone, state: 'Failed'});
+                }
+                await this._reportStatus(job.id, settings);
+              } catch {}
             }
           }));
         } else {
