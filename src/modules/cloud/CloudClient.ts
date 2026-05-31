@@ -59,6 +59,7 @@ class CloudClient {
 
           await Promise.all(jobs.map(async job => {
             if (job.type !== 'send') return;
+            let _step = 'insert';
             try {
               messageStore.insertMessage({
                 id: job.id,
@@ -66,15 +67,18 @@ class CloudClient {
                 isEncrypted: job.isEncrypted,
                 source: 'cloud',
               });
+              _step = 'sendSms';
+              console.log('[CloudClient] sendSms type:', typeof sendSms);
               await sendSms({
                 messageId: job.id,
                 phoneNumbers: job.phoneNumbers,
                 body: job.message,
                 simSlot: job.simNumber ? job.simNumber - 1 : undefined,
               });
+              _step = 'report';
               await this._reportStatus(job.id, settings);
             } catch (e) {
-              console.error('[CloudClient] Job failed:', e);
+              console.error(`[CloudClient] Job failed at ${_step}:`, e);
               // Report failure back so it shows as Failed on the server instead of staying Pending
               try {
                 const msg = messageStore.getMessage(job.id);
