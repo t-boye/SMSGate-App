@@ -17,6 +17,7 @@ export async function sendSms(params: {
 }): Promise<void> {
   // Access at call time so new-arch interop layer has finished registering modules
   const NativeSmsSender = NativeModules.SmsSender;
+  console.log('[SmsSender] module:', !!NativeSmsSender, 'keys:', NativeSmsSender ? Object.keys(NativeSmsSender).join(',') : 'null');
   if (!NativeSmsSender) {
     throw new Error('SmsSender native module not available');
   }
