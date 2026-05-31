@@ -1,5 +1,5 @@
 import React from 'react';
-import {View, Text, Image, StyleSheet} from 'react-native';
+import {View, Text, StyleSheet} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {Colors, Typography} from '../theme';
@@ -59,23 +59,11 @@ export default function AppNavigator() {
           ),
           tabBarStyle: styles.tabBar,
           tabBarItemStyle: styles.tabItem,
-          headerStyle: styles.header,
-          headerTitleStyle: styles.headerTitle,
-          headerTintColor: Colors.textPrimary,
-          headerShadowVisible: false,
+          headerShown: false,
         })}>
         <Tab.Screen
           name="Home"
           component={HomeScreen}
-          options={{
-            headerTitle: () => (
-              <Image
-                source={require('../assets/logo.png')}
-                style={styles.headerLogo}
-                resizeMode="contain"
-              />
-            ),
-          }}
         />
         <Tab.Screen
           name="Messages"
@@ -120,12 +108,4 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
   },
   labelFocused: {color: Colors.gold},
-  headerLogo: {height: 36, width: 120},
-  header: {backgroundColor: Colors.surface},
-  headerTitle: {
-    fontSize: Typography.base,
-    fontWeight: Typography.semibold,
-    color: Colors.textPrimary,
-    letterSpacing: 0.3,
-  },
 });
