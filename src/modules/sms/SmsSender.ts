@@ -15,59 +15,56 @@ export async function sendSms(params: {
   simSlot?: number;
   isEncrypted?: boolean;
 }): Promise<void> {
-  const NativeSmsSender = NativeModules.SmsSender;
-  if (!NativeSmsSender) {
-    throw new Error('SmsSender native module not available');
-  }
+  let _s = 'native';
+  try {
+    const NativeSmsSender = NativeModules.SmsSender;
+    if (!NativeSmsSender) throw new Error('SmsSender native module not available');
 
-  const msgSettings = await settingsStore.loadMessages();
-  const simSlot = params.simSlot ?? (msgSettings.simNumber ?? 1) - 1;
+    // Log what methods the native module exposes
+    console.log('[SmsSender] native keys:', Object.keys(NativeSmsSender).join(','));
+    console.log('[SmsSender] sendSms type:', typeof NativeSmsSender.sendSms);
 
-  // Encrypt the body if an encryption key is configured
-  let bodyToSend = params.body;
-  if (params.isEncrypted) {
-    const encKey = await settingsStore.loadEncryptionKey();
-    if (encKey) {
-      bodyToSend = Encryption.encrypt(params.body, encKey);
+    _s = 'settings';
+    const msgSettings = await settingsStore.loadMessages();
+    const simSlot = params.simSlot ?? (msgSettings.simNumber ?? 1) - 1;
+
+    let bodyToSend = params.body;
+    if (params.isEncrypted) {
+      _s = 'encrypt';
+      const encKey = await settingsStore.loadEncryptionKey();
+      if (encKey) bodyToSend = Encryption.encrypt(params.body, encKey);
     }
-  }
 
-  // Insert all recipients as Pending
-  const recipientIds: string[] = [];
-  for (const phone of params.phoneNumbers) {
-    const recipientId = generateId();
-    recipientIds.push(recipientId);
-    messageStore.insertRecipient({
-      id: recipientId,
-      messageId: params.messageId,
-      phone,
-      state: 'Pending',
-    });
-  }
-
-  // Send to each recipient
-  for (let i = 0; i < params.phoneNumbers.length; i++) {
-    const phone = params.phoneNumbers[i];
-    const recipientId = recipientIds[i];
-    try {
-      await NativeSmsSender.sendSms(
-        params.messageId,
-        recipientId,
-        phone,
-        bodyToSend,
-        simSlot,
-        msgSettings.trackDelivery,
-      );
-      // Actual state (Sent/Failed) comes from onDeliveryUpdate native event
-    } catch (e: any) {
-      messageStore.updateRecipientState(recipientId, 'Failed', e?.message ?? 'Send failed');
+    _s = 'insertRecipients';
+    const recipientIds: string[] = [];
+    for (const phone of params.phoneNumbers) {
+      const recipientId = generateId();
+      recipientIds.push(recipientId);
+      messageStore.insertRecipient({id: recipientId, messageId: params.messageId, phone, state: 'Pending'});
     }
-  }
 
-  await webhookDispatcher.dispatch('sms:sent', {
-    messageId: params.messageId,
-    phoneNumbers: params.phoneNumbers,
-  });
+    _s = 'nativeSend';
+    for (let i = 0; i < params.phoneNumbers.length; i++) {
+      const phone = params.phoneNumbers[i];
+      const recipientId = recipientIds[i];
+      try {
+        await NativeSmsSender.sendSms(
+          params.messageId, recipientId, phone, bodyToSend, simSlot, msgSettings.trackDelivery,
+        );
+      } catch (e: any) {
+        _s = 'updateState';
+        messageStore.updateRecipientState(recipientId, 'Failed', e?.message ?? 'Send failed');
+      }
+    }
+
+    _s = 'webhook';
+    await webhookDispatcher.dispatch('sms:sent', {messageId: params.messageId, phoneNumbers: params.phoneNumbers});
+
+    _s = 'done';
+  } catch (e) {
+    console.error(`[SmsSender] failed at step "${_s}":`, e);
+    throw e;
+  }
 }
 
 export async function getSimCards(): Promise<any[]> {
