@@ -6,26 +6,25 @@ import cors from 'cors';
 import messagesRouter from './routes/messages';
 import devicesRouter  from './routes/devices';
 import authRouter     from './routes/auth';
+import usersRouter    from './routes/users';
+import paystackRouter from './routes/paystack';
 import healthRouter   from './routes/health';
 import landingRouter  from './routes/landing';
 
 const app = express();
-
-// ─── Middleware ───────────────────────────────────────────────────────────────
 
 app.use(cors());
 app.use(express.json());
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
 
-app.use('/api/v1/messages', messagesRouter);
-app.use('/api/v1/auth',     authRouter);
-app.use('/api/v1',          devicesRouter);
-app.use('/health',          healthRouter);
-
-// ─── Landing page — exact GET / only (must be after all API routes) ───────────
-
-app.use('/', landingRouter);
+app.use('/api/v1/messages',  messagesRouter);
+app.use('/api/v1/users',     usersRouter);
+app.use('/api/v1/paystack',  paystackRouter);
+app.use('/api/v1/auth',      authRouter);      // device registration (legacy)
+app.use('/api/v1',           devicesRouter);
+app.use('/health',           healthRouter);
+app.use('/',                 landingRouter);
 
 // ─── Error Handler ────────────────────────────────────────────────────────────
 
@@ -38,17 +37,9 @@ app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'Not found' });
 });
 
-// ─── Local dev server ─────────────────────────────────────────────────────────
-// Vercel ignores this and uses the exported `app` directly.
-
 if (process.env.NODE_ENV !== 'production') {
   const PORT = Number(process.env.PORT ?? 3000);
-  app.listen(PORT, () => {
-    console.log(`SMS Gateway server running on http://localhost:${PORT}`);
-    console.log(`  Landing: http://localhost:${PORT}/`);
-    console.log(`  Health:  http://localhost:${PORT}/health`);
-    console.log(`  API:     http://localhost:${PORT}/api/v1/messages`);
-  });
+  app.listen(PORT, () => console.log(`SMS Gateway server running on http://localhost:${PORT}`));
 }
 
 export default app;
