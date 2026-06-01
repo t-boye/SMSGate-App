@@ -20,8 +20,10 @@ async function load<T>(key: string, fallback: () => T): Promise<T> {
   try {
     const raw = await AsyncStorage.getItem(key);
     if (!raw) return fallback();
-    // Merge: defaults fill in any fields missing from saved data
-    return {...fallback(), ...(JSON.parse(raw) as T)};
+    const parsed = JSON.parse(raw) as T;
+    // Arrays must be returned as-is — spreading them into an object destroys the array type
+    if (Array.isArray(parsed)) return parsed;
+    return {...fallback(), ...parsed};
   } catch {
     return fallback();
   }
