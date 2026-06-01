@@ -32,7 +32,7 @@ router.post('/register', async (req: Request, res: Response) => {
   const passwordHash = await bcrypt.hash(password, 10);
   const token        = uuidv4().replace(/-/g, '');
 
-  await deviceDb.create({ id, name, login, passwordHash, token });
+  await deviceDb.create({ id, userId: null, name, login, passwordHash, token });
 
   res.status(201).json({ id, name, login });
 });
