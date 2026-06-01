@@ -6,15 +6,35 @@ import { PLANS, PlanName } from '../types';
 
 const router = Router();
 
+// Plan prices in GHS (pesewas × 100)
+const PLAN_PRICES_GHS: Record<PlanName, number> = {
+  free:     0,
+  basic:    17000,   // GHS 170 / month (~$15)
+  pro:      55000,   // GHS 550 / month (~$49)
+  business: 168000,  // GHS 1680 / month (~$149)
+};
+
 const PAYSTACK_SECRET = () => {
   const key = process.env.PAYSTACK_SECRET_KEY;
   if (!key) throw new Error('PAYSTACK_SECRET_KEY not set');
   return key;
 };
 
+// ─── GET /api/v1/paystack/plans ───────────────────────────────────────────────
+router.get('/plans', (_req: Request, res: Response) => {
+  res.json(
+    Object.entries(PLANS).map(([key, p]) => ({
+      id: key,
+      name: p.name,
+      price: p.price,
+      priceGhs: PLAN_PRICES_GHS[key as PlanName] / 100,
+      smsLimit: p.smsLimit,
+    })),
+  );
+});
+
 // ─── POST /api/v1/paystack/initialize ─────────────────────────────────────────
-// User initiates a subscription upgrade.
-// Returns a Paystack authorization URL to redirect the user to.
+// User pays for a plan upgrade — simple one-time transaction (no plan codes needed).
 router.post('/initialize', requireUser, async (req: Request, res: Response) => {
   const user = req.user!;
   const { plan } = req.body as { plan: PlanName };
@@ -24,13 +44,9 @@ router.post('/initialize', requireUser, async (req: Request, res: Response) => {
     return;
   }
 
-  const planConfig = PLANS[plan];
-  if (!planConfig.paystackCode) {
-    res.status(503).json({ error: `Paystack plan code for "${plan}" not configured` });
-    return;
-  }
+  const amount = PLAN_PRICES_GHS[plan];
+  const dashboardUrl = process.env.DASHBOARD_URL ?? 'https://sms-gate-app.vercel.app';
 
-  // Initialize a Paystack transaction with subscription intent
   const response = await fetch('https://api.paystack.co/transaction/initialize', {
     method: 'POST',
     headers: {
@@ -39,18 +55,16 @@ router.post('/initialize', requireUser, async (req: Request, res: Response) => {
     },
     body: JSON.stringify({
       email: user.email,
-      amount: planConfig.price * 100, // Paystack uses kobo/pesewas (smallest unit)
+      amount,
       currency: 'GHS',
-      plan: planConfig.paystackCode,
       metadata: {
         user_id: user.id,
         plan,
         custom_fields: [
-          { display_name: 'Plan', variable_name: 'plan', value: planConfig.name },
-          { display_name: 'User', variable_name: 'user_id', value: user.id },
+          { display_name: 'Plan', variable_name: 'plan', value: PLANS[plan].name },
         ],
       },
-      callback_url: `${process.env.APP_URL ?? 'https://sms-gate-app.vercel.app'}/api/v1/paystack/callback`,
+      callback_url: `${process.env.APP_URL ?? dashboardUrl}/api/v1/paystack/callback`,
     }),
   });
 
@@ -67,10 +81,9 @@ router.post('/initialize', requireUser, async (req: Request, res: Response) => {
 });
 
 // ─── GET /api/v1/paystack/callback ────────────────────────────────────────────
-// Paystack redirects here after payment. Verify and activate plan.
 router.get('/callback', async (req: Request, res: Response) => {
   const { reference } = req.query as { reference: string };
-  if (!reference) { res.status(400).send('Missing reference'); return; }
+  if (!reference) { res.redirect(`${process.env.DASHBOARD_URL}/billing?status=failed`); return; }
 
   const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
     headers: { Authorization: `Bearer ${PAYSTACK_SECRET()}` },
@@ -79,7 +92,7 @@ router.get('/callback', async (req: Request, res: Response) => {
   const data = await response.json() as any;
 
   if (!data.status || data.data?.status !== 'success') {
-    res.redirect(`${process.env.DASHBOARD_URL ?? '/'}/billing?status=failed`);
+    res.redirect(`${process.env.DASHBOARD_URL}/billing?status=failed`);
     return;
   }
 
@@ -87,81 +100,62 @@ router.get('/callback', async (req: Request, res: Response) => {
   const plan   = data.data.metadata?.plan as PlanName;
 
   if (userId && plan && PLANS[plan]) {
-    const subCode      = data.data.subscription?.subscription_code ?? null;
-    const customerCode = data.data.customer?.customer_code ?? null;
-    await userDb.setPlan(userId, plan, subCode, customerCode);
+    // Activate plan for 30 days — set reset_at 30 days from now
+    await userDb.setPlan(userId, plan, null, data.data.customer?.customer_code ?? null);
+    await userDb.setSmsPlanExpiry(userId);
   }
 
-  res.redirect(`${process.env.DASHBOARD_URL ?? '/'}/billing?status=success&plan=${plan}`);
+  res.redirect(`${process.env.DASHBOARD_URL}/billing?status=success&plan=${plan}`);
 });
 
 // ─── POST /api/v1/paystack/webhook ────────────────────────────────────────────
-// Paystack sends events here (subscription renewals, cancellations, etc.)
 router.post('/webhook', async (req: Request, res: Response) => {
   const signature = req.headers['x-paystack-signature'] as string;
-  const secret    = PAYSTACK_SECRET();
-
-  // Verify webhook signature
   const hash = crypto
-    .createHmac('sha512', secret)
+    .createHmac('sha512', PAYSTACK_SECRET())
     .update(JSON.stringify(req.body))
     .digest('hex');
 
-  if (hash !== signature) {
-    res.status(401).json({ error: 'Invalid signature' });
-    return;
-  }
+  if (hash !== signature) { res.status(401).json({ error: 'Invalid signature' }); return; }
 
   const event = req.body as { event: string; data: any };
 
-  switch (event.event) {
-    case 'subscription.create':
-    case 'invoice.payment_succeeded': {
-      // Subscription created or renewed — keep plan active
-      const customerEmail = event.data?.customer?.email;
-      const planCode      = event.data?.plan?.plan_code;
-      const subCode       = event.data?.subscription_code ?? event.data?.data?.subscription_code;
-
-      if (customerEmail && planCode) {
-        const user = await userDb.getByEmail(customerEmail);
-        if (user) {
-          const plan = (Object.entries(PLANS) as [PlanName, typeof PLANS[PlanName]][])
-            .find(([, p]) => p.paystackCode === planCode)?.[0];
-          if (plan) {
-            await userDb.setPlan(user.id, plan, subCode ?? null, event.data?.customer?.customer_code ?? null);
-          }
-        }
-      }
-      break;
-    }
-
-    case 'subscription.disable':
-    case 'subscription.expiry_reminder': {
-      // Subscription cancelled — downgrade to free
-      const customerEmail = event.data?.customer?.email;
-      if (customerEmail) {
-        const user = await userDb.getByEmail(customerEmail);
-        if (user) await userDb.setPlan(user.id, 'free', null, null);
-      }
-      break;
+  // charge.success fires on every successful payment
+  if (event.event === 'charge.success') {
+    const userId = event.data?.metadata?.user_id;
+    const plan   = event.data?.metadata?.plan as PlanName;
+    if (userId && plan && PLANS[plan]) {
+      await userDb.setPlan(userId, plan, null, event.data?.customer?.customer_code ?? null);
+      await userDb.setSmsPlanExpiry(userId);
     }
   }
 
   res.json({ ok: true });
 });
 
-// ─── GET /api/v1/paystack/plans ───────────────────────────────────────────────
-// Public: list available plans and pricing
-router.get('/plans', (_req: Request, res: Response) => {
-  res.json(
-    Object.entries(PLANS).map(([key, p]) => ({
-      id: key,
-      name: p.name,
-      price: p.price,
-      smsLimit: p.smsLimit,
-      currency: 'GHS',
-    })),
-  );
+// ─── POST /api/v1/paystack/verify ─────────────────────────────────────────────
+// Dashboard calls this to verify payment after redirect
+router.post('/verify', requireUser, async (req: Request, res: Response) => {
+  const { reference } = req.body as { reference: string };
+  if (!reference) { res.status(400).json({ error: 'reference required' }); return; }
+
+  const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+    headers: { Authorization: `Bearer ${PAYSTACK_SECRET()}` },
+  });
+
+  const data = await response.json() as any;
+  if (!data.status || data.data?.status !== 'success') {
+    res.status(402).json({ error: 'Payment not confirmed' });
+    return;
+  }
+
+  const plan = data.data.metadata?.plan as PlanName;
+  if (data.data.metadata?.user_id === req.user!.id && plan && PLANS[plan]) {
+    await userDb.setPlan(req.user!.id, plan, null, data.data.customer?.customer_code ?? null);
+    await userDb.setSmsPlanExpiry(req.user!.id);
+  }
+
+  res.json({ ok: true, plan });
 });
 
 export default router;

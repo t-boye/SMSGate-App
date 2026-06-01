@@ -40,6 +40,14 @@ export const userDb = {
     );
   },
 
+  // Reset SMS counter and set expiry 30 days from now
+  async setSmsPlanExpiry(id: string): Promise<void> {
+    await pool.query(
+      `UPDATE users SET sms_used_month = 0, sms_reset_at = NOW() + INTERVAL '30 days' WHERE id = $1`,
+      [id],
+    );
+  },
+
   // Increment SMS usage for the month; returns new count
   async incrementSmsUsed(userId: string, count: number): Promise<number> {
     // Reset counter if past the reset date

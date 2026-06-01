@@ -3,10 +3,10 @@ import { Response } from 'express';
 // ─── Plans ────────────────────────────────────────────────────────────────────
 
 export const PLANS = {
-  free:     { name: 'Free',     smsLimit: 100,    price: 0,   paystackCode: '' },
-  basic:    { name: 'Basic',    smsLimit: 5_000,  price: 15,  paystackCode: process.env.PAYSTACK_BASIC_PLAN_CODE    ?? '' },
-  pro:      { name: 'Pro',      smsLimit: 30_000, price: 49,  paystackCode: process.env.PAYSTACK_PRO_PLAN_CODE      ?? '' },
-  business: { name: 'Business', smsLimit: -1,     price: 149, paystackCode: process.env.PAYSTACK_BUSINESS_PLAN_CODE ?? '' },
+  free:     { name: 'Free',     smsLimit: 100,    price: 0   },
+  basic:    { name: 'Basic',    smsLimit: 5_000,  price: 15  },
+  pro:      { name: 'Pro',      smsLimit: 30_000, price: 49  },
+  business: { name: 'Business', smsLimit: -1,     price: 149 },
 } as const;
 
 export type PlanName = keyof typeof PLANS;
