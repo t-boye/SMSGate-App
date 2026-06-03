@@ -2,16 +2,30 @@
 import { useEffect, useState } from 'react';
 import { getToken } from '@/lib/auth';
 import { api } from '@/lib/api';
-import { Smartphone, Plus, Trash2, Wifi, WifiOff, Copy, Check } from 'lucide-react';
+import { Smartphone, Plus, Trash2, Copy, Check, X, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
+
+function Skeleton({ className = '' }: { className?: string }) {
+  return <div className={`skeleton ${className}`} />;
+}
+
+function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`rounded-2xl border ${className}`} style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+      {children}
+    </div>
+  );
+}
 
 export default function DevicesPage() {
-  const [devices, setDevices] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [devices, setDevices]   = useState<any[]>([]);
+  const [me, setMe]             = useState<any>(null);
+  const [loading, setLoading]   = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: '', login: '', password: '' });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [copied, setCopied] = useState<string | null>(null);
+  const [form, setForm]         = useState({ name: '', login: '', password: '' });
+  const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState('');
+  const [copied, setCopied]     = useState<string | null>(null);
 
   const token = getToken()!;
 
@@ -19,7 +33,11 @@ export default function DevicesPage() {
 
   async function load() {
     setLoading(true);
-    try { setDevices(await api.devices(token)); } catch { }
+    try {
+      const [d, m] = await Promise.all([api.devices(token), api.me(token)]);
+      setDevices(d);
+      setMe(m);
+    } catch {}
     setLoading(false);
   }
 
@@ -36,7 +54,7 @@ export default function DevicesPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm('Delete this device?')) return;
+    if (!confirm('Delete this device? This cannot be undone.')) return;
     await api.deleteDevice(token, id).catch(console.error);
     setDevices(d => d.filter(x => x.id !== id));
   }
@@ -47,79 +65,136 @@ export default function DevicesPage() {
     setTimeout(() => setCopied(null), 2000);
   }
 
+  const deviceLimit  = me?.plan?.deviceLimit ?? null;
+  const atLimit      = deviceLimit !== null && devices.length >= deviceLimit;
+
   return (
-    <div className="max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="max-w-3xl space-y-5">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold">Devices</h2>
-          <p className="text-gray-400 text-sm mt-1">Your Android phones acting as SMS gateways</p>
+          <h1 className="text-xl font-semibold text-white">Devices</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Android phones acting as SMS gateways
+            {deviceLimit !== null && (
+              <span className={`ml-2 ${atLimit ? 'text-red-400' : 'text-gray-600'}`}>
+                · {devices.length}/{deviceLimit} used
+              </span>
+            )}
+          </p>
         </div>
         <button
           onClick={() => setShowForm(s => !s)}
-          className="flex items-center gap-2 bg-green-500 hover:bg-green-400 text-black font-semibold px-4 py-2 rounded-lg text-sm"
+          disabled={atLimit}
+          title={atLimit ? `Upgrade to add more devices (limit: ${deviceLimit})` : undefined}
+          className="flex items-center gap-2 bg-green-500 hover:bg-green-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-semibold px-3.5 py-2 rounded-lg text-sm transition-colors"
         >
-          <Plus size={16} /> Add Device
+          <Plus size={15} /> Add Device
         </button>
       </div>
 
-      {showForm && (
-        <form onSubmit={create} className="bg-gray-900 border border-gray-800 rounded-2xl p-6 space-y-4">
-          <h3 className="font-semibold">New Device</h3>
-          {error && <p className="text-red-400 text-sm">{error}</p>}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[['name', 'Device name', 'My Phone'], ['login', 'Username', 'myphone'], ['password', 'Password', 'Min 6 chars']].map(([k, label, ph]) => (
-              <div key={k}>
-                <label className="text-xs text-gray-400 mb-1 block">{label}</label>
-                <input
-                  required type={k === 'password' ? 'password' : 'text'}
-                  value={(form as any)[k]} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))}
-                  placeholder={ph}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-green-500"
-                />
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-3">
-            <button type="submit" disabled={saving} className="bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-semibold px-4 py-2 rounded-lg text-sm">
-              {saving ? 'Creating…' : 'Create'}
-            </button>
-            <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:text-white">Cancel</button>
-          </div>
-          <p className="text-xs text-gray-500">After creating, open the SMSGate Android app → Settings → Cloud Server → enter these credentials.</p>
-        </form>
+      {/* Limit banner */}
+      {atLimit && (
+        <div className="flex items-center justify-between gap-4 rounded-xl px-4 py-3 bg-yellow-500/10 border border-yellow-500/20">
+          <p className="text-sm text-yellow-300">You&apos;ve reached your device limit on the <span className="font-medium capitalize">{me?.user?.plan}</span> plan.</p>
+          <Link href="/dashboard/billing" className="text-xs text-green-400 hover:text-green-300 flex items-center gap-1 shrink-0">
+            Upgrade <ArrowRight size={10} />
+          </Link>
+        </div>
       )}
 
+      {/* Add form */}
+      {showForm && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-sm text-white">New Device</h3>
+            <button onClick={() => setShowForm(false)} className="text-gray-600 hover:text-white">
+              <X size={16} />
+            </button>
+          </div>
+          {error && <p className="text-red-400 text-xs mb-3">{error}</p>}
+          <form onSubmit={create} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[['name', 'Device name', 'My Phone', 'text'], ['login', 'Username', 'myphone', 'text'], ['password', 'Password', 'Min 6 chars', 'password']].map(([k, label, ph, type]) => (
+                <div key={k}>
+                  <label className="text-xs text-gray-500 mb-1.5 block">{label}</label>
+                  <input
+                    required type={type}
+                    value={(form as any)[k]}
+                    onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))}
+                    placeholder={ph}
+                    className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 border focus:outline-none focus:border-green-500/60 transition-colors"
+                    style={{ background: 'var(--bg-raised)', borderColor: 'var(--border-md)' }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-3">
+              <button type="submit" disabled={saving}
+                className="bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-semibold px-4 py-2 rounded-lg text-sm transition-colors">
+                {saving ? 'Creating…' : 'Create device'}
+              </button>
+              <button type="button" onClick={() => setShowForm(false)} className="text-sm text-gray-500 hover:text-white">Cancel</button>
+            </div>
+            <p className="text-xs text-gray-600">After creating, open the SMSGate Android app → Settings → Cloud Server → enter these credentials.</p>
+          </form>
+        </Card>
+      )}
+
+      {/* List */}
       {loading ? (
-        <p className="text-gray-500 animate-pulse">Loading…</p>
-      ) : devices.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">
-          <Smartphone size={48} className="mx-auto mb-4 opacity-30" />
-          <p>No devices yet. Add your Android phone to get started.</p>
+        <div className="space-y-3">
+          {[...Array(2)].map((_, i) => (
+            <Card key={i} className="p-5">
+              <div className="flex items-start gap-4">
+                <Skeleton className="w-2 h-2 mt-1.5 rounded-full" />
+                <div className="flex-1">
+                  <Skeleton className="h-4 w-32 mb-2" />
+                  <Skeleton className="h-3 w-24 mb-1" />
+                  <Skeleton className="h-3 w-40" />
+                </div>
+              </div>
+            </Card>
+          ))}
         </div>
+      ) : devices.length === 0 ? (
+        <Card className="py-16 flex flex-col items-center text-center">
+          <Smartphone size={40} className="text-gray-700 mb-3" />
+          <p className="text-sm text-gray-500 mb-1">No devices yet</p>
+          <p className="text-xs text-gray-600">Add your Android phone to start sending SMS</p>
+        </Card>
       ) : (
         <div className="space-y-3">
           {devices.map((d: any) => (
-            <div key={d.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 flex items-start justify-between gap-4">
-              <div className="flex items-start gap-4">
-                <div className={`mt-1 w-2 h-2 rounded-full ${d.isOnline ? 'bg-green-400' : 'bg-gray-600'}`} />
-                <div>
-                  <p className="font-medium">{d.name}</p>
-                  <p className="text-xs text-gray-500 mt-1">Login: {d.login}</p>
-                  <p className="text-xs text-gray-500">
-                    {d.isOnline ? '🟢 Online' : d.lastSeenAt ? `Last seen ${new Date(d.lastSeenAt).toLocaleString()}` : 'Never connected'}
-                  </p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <code className="text-xs bg-gray-800 rounded px-2 py-1 text-green-300 max-w-xs truncate">{d.token}</code>
-                    <button onClick={() => copy(d.token, d.id)} className="text-gray-500 hover:text-white">
-                      {copied === d.id ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-                    </button>
+            <Card key={d.id} className="p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${d.isOnline ? 'bg-green-400' : 'bg-gray-700'}`} />
+                  <div>
+                    <p className="text-sm font-medium text-white">{d.name}</p>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      {d.isOnline
+                        ? <span className="text-green-400">Online</span>
+                        : d.lastSeenAt
+                          ? `Last seen ${new Date(d.lastSeenAt).toLocaleString()}`
+                          : 'Never connected'}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-0.5">Username: <span className="text-gray-400">{d.login}</span></p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <code className="text-xs rounded-md px-2 py-1 text-green-300 font-mono max-w-xs truncate" style={{ background: 'var(--bg-raised)' }}>
+                        {d.token}
+                      </code>
+                      <button onClick={() => copy(d.token, d.id)} className="text-gray-600 hover:text-white transition-colors">
+                        {copied === d.id ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
+                      </button>
+                    </div>
                   </div>
                 </div>
+                <button onClick={() => remove(d.id)} className="text-gray-700 hover:text-red-400 transition-colors shrink-0">
+                  <Trash2 size={16} />
+                </button>
               </div>
-              <button onClick={() => remove(d.id)} className="text-gray-600 hover:text-red-400 flex-shrink-0">
-                <Trash2 size={18} />
-              </button>
-            </div>
+            </Card>
           ))}
         </div>
       )}

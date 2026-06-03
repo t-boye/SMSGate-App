@@ -33,6 +33,14 @@ export const userDb = {
     return rows[0] ?? null;
   },
 
+  async updateName(id: string, name: string): Promise<void> {
+    await pool.query('UPDATE users SET name = $1 WHERE id = $2', [name, id]);
+  },
+
+  async updatePassword(id: string, passwordHash: string): Promise<void> {
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, id]);
+  },
+
   async setPlan(id: string, plan: PlanName, subscriptionCode: string | null, customerCode: string | null): Promise<void> {
     await pool.query(
       `UPDATE users SET plan = $1, paystack_subscription_code = $2, paystack_customer_code = $3 WHERE id = $4`,

@@ -52,4 +52,10 @@ export const api = {
 
   verifyPayment: (token: string, reference: string) =>
     apiFetch('/api/v1/paystack/verify', { method: 'POST', body: JSON.stringify({ reference }) }, token),
+
+  updateProfile: (token: string, data: { name: string }) =>
+    apiFetch('/api/v1/users/me', { method: 'PATCH', body: JSON.stringify(data) }, token),
+
+  changePassword: (token: string, data: { currentPassword: string; newPassword: string }) =>
+    apiFetch('/api/v1/users/me/password', { method: 'POST', body: JSON.stringify(data) }, token),
 };

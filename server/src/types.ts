@@ -3,10 +3,10 @@ import { Response } from 'express';
 // ─── Plans ────────────────────────────────────────────────────────────────────
 
 export const PLANS = {
-  free:     { name: 'Free',     smsLimit: 100,    price: 0   },
-  basic:    { name: 'Basic',    smsLimit: 5_000,  price: 15  },
-  pro:      { name: 'Pro',      smsLimit: 30_000, price: 49  },
-  business: { name: 'Business', smsLimit: -1,     price: 149 },
+  free:     { name: 'Free',     smsLimit: 100,    deviceLimit: 1,  keyLimit: 1,  price: 0   },
+  basic:    { name: 'Basic',    smsLimit: 5_000,  deviceLimit: 3,  keyLimit: 5,  price: 15  },
+  pro:      { name: 'Pro',      smsLimit: 30_000, deviceLimit: 10, keyLimit: -1, price: 49  },
+  business: { name: 'Business', smsLimit: -1,     deviceLimit: -1, keyLimit: -1, price: 149 },
 } as const;
 
 export type PlanName = keyof typeof PLANS;

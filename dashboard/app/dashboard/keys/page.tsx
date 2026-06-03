@@ -2,15 +2,27 @@
 import { useEffect, useState } from 'react';
 import { getToken } from '@/lib/auth';
 import { api } from '@/lib/api';
-import { Key, Plus, Trash2, Copy, Check, Eye, EyeOff } from 'lucide-react';
+import { Key, Plus, Trash2, Copy, Check, Eye, EyeOff, X } from 'lucide-react';
+
+function Skeleton({ className = '' }: { className?: string }) {
+  return <div className={`skeleton ${className}`} />;
+}
+
+function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`rounded-2xl border ${className}`} style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+      {children}
+    </div>
+  );
+}
 
 export default function ApiKeysPage() {
-  const [keys, setKeys] = useState<any[]>([]);
+  const [keys, setKeys]       = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [name, setName] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [copied, setCopied] = useState<string | null>(null);
+  const [name, setName]       = useState('');
+  const [saving, setSaving]   = useState(false);
+  const [error, setError]     = useState('');
+  const [copied, setCopied]   = useState<string | null>(null);
   const [revealed, setRevealed] = useState<string | null>(null);
 
   const token = getToken()!;
@@ -19,7 +31,7 @@ export default function ApiKeysPage() {
 
   async function load() {
     setLoading(true);
-    try { setKeys(await api.apiKeys(token)); } catch { }
+    try { setKeys(await api.apiKeys(token)); } catch {}
     setLoading(false);
   }
 
@@ -35,7 +47,7 @@ export default function ApiKeysPage() {
   }
 
   async function remove(key: string) {
-    if (!confirm('Delete this API key? This cannot be undone.')) return;
+    if (!confirm('Delete this API key? Apps using it will stop working immediately.')) return;
     await api.deleteApiKey(token, key).catch(console.error);
     setKeys(k => k.filter(x => x.key !== key));
   }
@@ -47,69 +59,89 @@ export default function ApiKeysPage() {
   }
 
   function mask(key: string) {
-    return key.slice(0, 8) + '••••••••••••••••••••••••';
+    return key.slice(0, 10) + '•'.repeat(22);
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-3xl space-y-5">
+      {/* Header */}
       <div>
-        <h2 className="text-2xl font-bold">API Keys</h2>
-        <p className="text-gray-400 text-sm mt-1">Use these keys to submit SMS jobs from your app</p>
+        <h1 className="text-xl font-semibold text-white">API Keys</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Authenticate your apps to send SMS via the REST API</p>
       </div>
 
-      <form onSubmit={create} className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-        <h3 className="font-semibold mb-4">Create New Key</h3>
-        {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
-        <div className="flex gap-3">
+      {/* Create form */}
+      <Card className="p-5">
+        <h3 className="text-sm font-semibold text-white mb-3">Create new key</h3>
+        {error && <p className="text-red-400 text-xs mb-3">{error}</p>}
+        <form onSubmit={create} className="flex gap-2">
           <input
             required value={name} onChange={e => setName(e.target.value)}
-            placeholder="Key name (e.g. my-app)"
-            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-green-500"
+            placeholder="Key name (e.g. production-app)"
+            className="flex-1 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 border focus:outline-none focus:border-green-500/60 transition-colors"
+            style={{ background: 'var(--bg-raised)', borderColor: 'var(--border-md)' }}
           />
-          <button type="submit" disabled={saving} className="bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-semibold px-4 py-2 rounded-lg text-sm flex items-center gap-2">
-            <Plus size={16} /> {saving ? 'Creating…' : 'Create'}
+          <button type="submit" disabled={saving}
+            className="flex items-center gap-2 bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-semibold px-4 py-2 rounded-lg text-sm transition-colors shrink-0">
+            <Plus size={15} /> {saving ? 'Creating…' : 'Create'}
           </button>
-        </div>
-      </form>
+        </form>
+      </Card>
 
+      {/* Usage hint */}
+      <Card className="p-4">
+        <p className="text-xs text-gray-500 mb-2 font-medium">Authentication header</p>
+        <pre className="text-xs text-green-300 font-mono" style={{ background: 'var(--bg-raised)', borderRadius: 8, padding: '8px 12px' }}>
+          {`Authorization: Bearer YOUR_API_KEY`}
+        </pre>
+      </Card>
+
+      {/* List */}
       {loading ? (
-        <p className="text-gray-500 animate-pulse">Loading…</p>
-      ) : keys.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">
-          <Key size={48} className="mx-auto mb-4 opacity-30" />
-          <p>No API keys yet. Create one to start sending SMS.</p>
+        <div className="space-y-3">
+          {[...Array(2)].map((_, i) => (
+            <Card key={i} className="p-5">
+              <Skeleton className="h-4 w-32 mb-2" />
+              <Skeleton className="h-3 w-24 mb-3" />
+              <Skeleton className="h-7 w-64" />
+            </Card>
+          ))}
         </div>
+      ) : keys.length === 0 ? (
+        <Card className="py-16 flex flex-col items-center text-center">
+          <Key size={40} className="text-gray-700 mb-3" />
+          <p className="text-sm text-gray-500 mb-1">No API keys yet</p>
+          <p className="text-xs text-gray-600">Create a key above to start sending SMS</p>
+        </Card>
       ) : (
         <div className="space-y-3">
           {keys.map((k: any) => (
-            <div key={k.key} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 flex items-center justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <p className="font-medium">{k.name}</p>
-                <p className="text-xs text-gray-500 mt-1">Created {new Date(k.createdAt).toLocaleDateString()}</p>
-                <div className="flex items-center gap-2 mt-2">
-                  <code className="text-xs bg-gray-800 rounded px-2 py-1 text-green-300 font-mono">
-                    {revealed === k.key ? k.key : mask(k.key)}
-                  </code>
-                  <button onClick={() => setRevealed(r => r === k.key ? null : k.key)} className="text-gray-500 hover:text-white">
-                    {revealed === k.key ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                  <button onClick={() => copy(k.key)} className="text-gray-500 hover:text-white">
-                    {copied === k.key ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
-                  </button>
+            <Card key={k.key} className="p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white">{k.name}</p>
+                  <p className="text-xs text-gray-600 mt-0.5">Created {new Date(k.createdAt).toLocaleDateString()}</p>
+                  <div className="flex items-center gap-2 mt-2.5">
+                    <code className="text-xs rounded-md px-2.5 py-1 text-green-300 font-mono" style={{ background: 'var(--bg-raised)' }}>
+                      {revealed === k.key ? k.key : mask(k.key)}
+                    </code>
+                    <button onClick={() => setRevealed(r => r === k.key ? null : k.key)}
+                      className="text-gray-600 hover:text-white transition-colors" title={revealed === k.key ? 'Hide' : 'Reveal'}>
+                      {revealed === k.key ? <EyeOff size={13} /> : <Eye size={13} />}
+                    </button>
+                    <button onClick={() => copy(k.key)} className="text-gray-600 hover:text-white transition-colors" title="Copy">
+                      {copied === k.key ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
+                    </button>
+                  </div>
                 </div>
+                <button onClick={() => remove(k.key)} className="text-gray-700 hover:text-red-400 transition-colors shrink-0">
+                  <Trash2 size={16} />
+                </button>
               </div>
-              <button onClick={() => remove(k.key)} className="text-gray-600 hover:text-red-400 flex-shrink-0">
-                <Trash2 size={18} />
-              </button>
-            </div>
+            </Card>
           ))}
         </div>
       )}
-
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-        <p className="text-sm font-medium mb-2">How to use</p>
-        <pre className="text-xs text-green-300 bg-gray-800 rounded-lg p-4 overflow-x-auto">{`Authorization: Bearer YOUR_API_KEY`}</pre>
-      </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import React from 'react';
-import {View, Text, StyleSheet} from 'react-native';
+import React, {useEffect} from 'react';
+import {View, Text, StyleSheet, PermissionsAndroid, Platform} from 'react-native';
 import {NavigationContainer} from '@react-navigation/native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {Colors, Typography} from '../theme';
@@ -44,7 +44,27 @@ const navTheme = {
   },
 };
 
+async function requestAppPermissions() {
+  if (Platform.OS !== 'android') return;
+
+  const perms: string[] = [
+    PermissionsAndroid.PERMISSIONS.SEND_SMS,
+    PermissionsAndroid.PERMISSIONS.RECEIVE_SMS,
+    PermissionsAndroid.PERMISSIONS.READ_SMS,
+    PermissionsAndroid.PERMISSIONS.READ_PHONE_STATE,
+  ];
+
+  // POST_NOTIFICATIONS is only a runtime permission on Android 13+
+  if (Platform.Version >= 33) {
+    perms.push(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+  }
+
+  await PermissionsAndroid.requestMultiple(perms);
+}
+
 export default function AppNavigator() {
+  useEffect(() => { requestAppPermissions(); }, []);
+
   return (
     <NavigationContainer theme={navTheme}>
       <Tab.Navigator

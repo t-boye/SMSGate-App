@@ -2,85 +2,128 @@
 import { useEffect, useState } from 'react';
 import { getToken } from '@/lib/auth';
 import { api } from '@/lib/api';
-import { MessageSquare, RefreshCw } from 'lucide-react';
+import { MessageSquare, RefreshCw, ChevronDown, ChevronUp, Lock } from 'lucide-react';
 
-const STATE_COLORS: Record<string, string> = {
-  Pending:   'bg-yellow-500/20 text-yellow-400',
-  Processed: 'bg-blue-500/20 text-blue-400',
-  Sent:      'bg-green-500/20 text-green-400',
-  Delivered: 'bg-green-500/20 text-green-300',
-  Failed:    'bg-red-500/20 text-red-400',
+function Skeleton({ className = '' }: { className?: string }) {
+  return <div className={`skeleton ${className}`} />;
+}
+
+function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`rounded-2xl border ${className}`} style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+      {children}
+    </div>
+  );
+}
+
+const STATE: Record<string, { bg: string; text: string }> = {
+  Pending:   { bg: 'bg-yellow-500/10', text: 'text-yellow-400' },
+  Processed: { bg: 'bg-blue-500/10',   text: 'text-blue-400' },
+  Sent:      { bg: 'bg-green-500/10',  text: 'text-green-400' },
+  Delivered: { bg: 'bg-green-500/10',  text: 'text-green-300' },
+  Failed:    { bg: 'bg-red-500/10',    text: 'text-red-400' },
 };
 
 export default function MessagesPage() {
   const [messages, setMessages] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]   = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const token = getToken()!;
 
-  async function load() {
-    setLoading(true);
-    try { setMessages(await api.messages(token)); } catch { }
+  async function load(quiet = false) {
+    if (!quiet) setLoading(true);
+    else setRefreshing(true);
+    try { setMessages(await api.messages(token)); } catch {}
     setLoading(false);
+    setRefreshing(false);
   }
 
   useEffect(() => { load(); }, []);
 
   return (
-    <div className="max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="max-w-4xl space-y-5">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold">Messages</h2>
-          <p className="text-gray-400 text-sm mt-1">Recent SMS sent through your gateway</p>
+          <h1 className="text-xl font-semibold text-white">Messages</h1>
+          <p className="text-sm text-gray-500 mt-0.5">SMS sent through your gateway (last 50)</p>
         </div>
-        <button onClick={load} className="flex items-center gap-2 text-sm text-gray-400 hover:text-white border border-gray-700 rounded-lg px-3 py-2">
-          <RefreshCw size={14} /> Refresh
+        <button
+          onClick={() => load(true)}
+          disabled={refreshing}
+          className="flex items-center gap-2 text-sm text-gray-500 hover:text-white border rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50"
+          style={{ borderColor: 'var(--border-md)' }}
+        >
+          <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} /> Refresh
         </button>
       </div>
 
       {loading ? (
-        <p className="text-gray-500 animate-pulse">Loading…</p>
-      ) : messages.length === 0 ? (
-        <div className="text-center py-16 text-gray-500">
-          <MessageSquare size={48} className="mx-auto mb-4 opacity-30" />
-          <p>No messages yet. Send your first SMS via the API.</p>
+        <div className="space-y-2">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i} className="p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <Skeleton className="h-4 w-3/4 mb-2" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </div>
+            </Card>
+          ))}
         </div>
+      ) : messages.length === 0 ? (
+        <Card className="py-16 flex flex-col items-center text-center">
+          <MessageSquare size={40} className="text-gray-700 mb-3" />
+          <p className="text-sm text-gray-500 mb-1">No messages yet</p>
+          <p className="text-xs text-gray-600">Send your first SMS via the API</p>
+        </Card>
       ) : (
         <div className="space-y-2">
-          {messages.map((msg: any) => (
-            <div
-              key={msg.id}
-              className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden"
-            >
-              <button
-                onClick={() => setExpanded(e => e === msg.id ? null : msg.id)}
-                className="w-full flex items-start justify-between gap-4 p-4 text-left hover:bg-gray-800/50"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{msg.message}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    To: {msg.phoneNumbers?.join(', ')} · {new Date(msg.createdAt).toLocaleString()}
-                  </p>
-                </div>
-                <span className={`text-xs font-medium px-2 py-1 rounded-full flex-shrink-0 ${STATE_COLORS[msg.state] ?? 'bg-gray-700 text-gray-300'}`}>
-                  {msg.state}
-                </span>
-              </button>
+          {messages.map((msg: any) => {
+            const s = STATE[msg.state] ?? { bg: 'bg-gray-500/10', text: 'text-gray-400' };
+            const open = expanded === msg.id;
+            return (
+              <Card key={msg.id} className="overflow-hidden">
+                <button
+                  onClick={() => setExpanded(e => e === msg.id ? null : msg.id)}
+                  className="w-full flex items-start justify-between gap-4 p-4 text-left hover:bg-white/[0.02] transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white truncate">{msg.message}</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {msg.phoneNumbers?.join(', ')} · {new Date(msg.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full ${s.bg} ${s.text}`}>{msg.state}</span>
+                    {open ? <ChevronUp size={14} className="text-gray-600" /> : <ChevronDown size={14} className="text-gray-600" />}
+                  </div>
+                </button>
 
-              {expanded === msg.id && (
-                <div className="border-t border-gray-800 px-4 py-3 space-y-2">
-                  <p className="text-xs text-gray-500">Message ID: <span className="text-gray-300 font-mono">{msg.id}</span></p>
-                  {msg.recipients?.map((r: any, i: number) => (
-                    <div key={i} className="flex items-center justify-between text-xs">
-                      <span className="text-gray-400">{r.phoneNumber}</span>
-                      <span className={`px-2 py-0.5 rounded-full ${STATE_COLORS[r.state] ?? 'bg-gray-700 text-gray-300'}`}>{r.state}</span>
-                    </div>
-                  ))}
-                  {msg.isEncrypted && <p className="text-xs text-purple-400">🔒 Encrypted</p>}
-                </div>
-              )}
-            </div>
-          ))}
+                {open && (
+                  <div className="border-t px-4 py-3 space-y-2" style={{ borderColor: 'var(--border)', background: 'var(--bg-raised)' }}>
+                    <p className="text-xs text-gray-600 font-mono">ID: {msg.id}</p>
+                    {msg.recipients?.map((r: any, i: number) => {
+                      const rs = STATE[r.state] ?? { bg: 'bg-gray-500/10', text: 'text-gray-400' };
+                      return (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-gray-400">{r.phoneNumber}</span>
+                          <span className={`px-2 py-0.5 rounded-full ${rs.bg} ${rs.text}`}>{r.state}</span>
+                        </div>
+                      );
+                    })}
+                    {msg.isEncrypted && (
+                      <p className="flex items-center gap-1.5 text-xs text-purple-400">
+                        <Lock size={11} /> End-to-end encrypted
+                      </p>
+                    )}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

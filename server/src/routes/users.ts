@@ -68,8 +68,7 @@ router.post('/login', async (req: Request, res: Response) => {
 router.get('/me', requireUser, async (req: Request, res: Response) => {
   const user = req.user!;
   const plan = PLANS[user.plan];
-  const devices = await deviceDb.list(user.id);
-  const keys = await apiKeyDb.list(user.id);
+  const [devices, keys] = await Promise.all([deviceDb.list(user.id), apiKeyDb.list(user.id)]);
 
   res.json({
     user: safeUser(user),
@@ -79,10 +78,47 @@ router.get('/me', requireUser, async (req: Request, res: Response) => {
       smsUsed: user.sms_used_month,
       smsRemaining: plan.smsLimit === -1 ? null : Math.max(0, plan.smsLimit - user.sms_used_month),
       resetsAt: user.sms_reset_at,
+      deviceLimit: plan.deviceLimit,
+      keyLimit: plan.keyLimit,
     },
     deviceCount: devices.length,
     apiKeyCount: keys.length,
   });
+});
+
+// ─── PATCH /api/v1/users/me ───────────────────────────────────────────────────
+router.patch('/me', requireUser, async (req: Request, res: Response) => {
+  const { name } = req.body as { name?: string };
+  if (!name || !name.trim()) {
+    res.status(400).json({ error: 'name is required' });
+    return;
+  }
+  await userDb.updateName(req.user!.id, name.trim());
+  res.json({ ok: true });
+});
+
+// ─── POST /api/v1/users/me/password ──────────────────────────────────────────
+router.post('/me/password', requireUser, async (req: Request, res: Response) => {
+  const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: 'currentPassword and newPassword are required' });
+    return;
+  }
+  if (newPassword.length < 6) {
+    res.status(400).json({ error: 'New password must be at least 6 characters' });
+    return;
+  }
+
+  const user = await userDb.getById(req.user!.id);
+  const valid = user ? await bcrypt.compare(currentPassword, user.password_hash) : false;
+  if (!valid) {
+    res.status(401).json({ error: 'Current password is incorrect' });
+    return;
+  }
+
+  const hash = await bcrypt.hash(newPassword, 10);
+  await userDb.updatePassword(req.user!.id, hash);
+  res.json({ ok: true });
 });
 
 // ─── GET /api/v1/users/me/usage ───────────────────────────────────────────────

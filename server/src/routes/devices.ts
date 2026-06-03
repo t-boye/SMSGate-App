@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
 import { requireAdmin, requireUser } from '../middleware/auth';
 import { deviceDb, apiKeyDb } from '../database';
-import { CreateDeviceBody, CreateApiKeyBody } from '../types';
+import { CreateDeviceBody, CreateApiKeyBody, PLANS } from '../types';
 
 const router = Router();
 
@@ -35,6 +35,18 @@ router.post('/devices', requireUser, async (req: Request, res: Response) => {
     return;
   }
 
+  const plan = PLANS[req.user!.plan];
+  if (plan.deviceLimit !== -1) {
+    const existing = await deviceDb.list(req.user!.id);
+    if (existing.length >= plan.deviceLimit) {
+      res.status(403).json({
+        error: `Device limit reached for ${plan.name} plan (max ${plan.deviceLimit})`,
+        upgrade: '/api/v1/paystack/plans',
+      });
+      return;
+    }
+  }
+
   const id = uuidv4();
   const passwordHash = await bcrypt.hash(password, 10);
   const token = uuidv4().replace(/-/g, '');
@@ -64,6 +76,19 @@ router.get('/keys', requireUser, async (req: Request, res: Response) => {
 router.post('/keys', requireUser, async (req: Request, res: Response) => {
   const { name } = req.body as CreateApiKeyBody;
   if (!name) { res.status(400).json({ error: 'name is required' }); return; }
+
+  const plan = PLANS[req.user!.plan];
+  if (plan.keyLimit !== -1) {
+    const existing = await apiKeyDb.list(req.user!.id);
+    if (existing.length >= plan.keyLimit) {
+      res.status(403).json({
+        error: `API key limit reached for ${plan.name} plan (max ${plan.keyLimit})`,
+        upgrade: '/api/v1/paystack/plans',
+      });
+      return;
+    }
+  }
+
   const key = uuidv4().replace(/-/g, '');
   await apiKeyDb.create(key, name, req.user!.id);
   res.status(201).json({ key, name });

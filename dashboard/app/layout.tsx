@@ -1,18 +1,20 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 
-const inter = Inter({ subsets: ['latin'] });
+const geist = Geist({ subsets: ['latin'], variable: '--font-geist' });
+const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' });
 
 export const metadata: Metadata = {
-  title: 'SMSGate Dashboard',
-  description: 'Send SMS from your own phone via API',
+  title: 'SMSGate – SMS Gateway Platform',
+  description: 'Turn your Android phone into a programmable SMS gateway',
+  icons: { icon: '/logo.png', apple: '/logo.png' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} bg-gray-950 text-white min-h-screen`}>
+    <html lang="en" className={`${geist.variable} ${geistMono.variable}`}>
+      <body className="bg-[#080C14] text-white min-h-screen antialiased font-sans">
         {children}
       </body>
     </html>
