@@ -1,6 +1,7 @@
 import {NativeEventEmitter, NativeModules} from 'react-native';
 import {messageStore} from '../storage/MessageStore';
 import {webhookDispatcher} from '../webhook/WebhookDispatcher';
+import {cloudClient} from '../cloud/CloudClient';
 
 const {SmsReceiver: NativeSmsReceiver} = NativeModules;
 
@@ -69,6 +70,8 @@ export function startListening(): () => void {
         const webhookEvent =
           event.status === 'delivered' ? 'sms:delivered' :
           event.status === 'failed'    ? 'sms:failed'    : null;
+        await cloudClient.reportStatus(event.messageId).catch(() => {});
+
         if (webhookEvent) {
           const msg = messageStore.getMessage(event.messageId);
           const recipient = msg?.recipients.find(r => r.id === event.recipientId);

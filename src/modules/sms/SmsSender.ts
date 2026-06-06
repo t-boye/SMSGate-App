@@ -55,6 +55,7 @@ export async function sendSms(params: {
         simSlot,
         msgSettings.trackDelivery,
       );
+      messageStore.updateRecipientState(recipientId, 'Sent');
     } catch (e: any) {
       messageStore.updateRecipientState(recipientId, 'Failed', e?.message ?? 'Send failed');
     }

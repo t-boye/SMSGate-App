@@ -117,16 +117,6 @@ export const messageDb = {
     );
   },
 
-  async touchDeviceSeen(deviceId: string): Promise<void> {
-    await pool.query(`UPDATE devices SET last_seen_at = NOW() WHERE id = $1`, [deviceId]);
-  },
-
-  async updateSims(deviceId: string, sims: any[]): Promise<void> {
-    await pool.query(
-      `UPDATE devices SET sims = $1, last_seen_at = NOW() WHERE id = $2`,
-      [JSON.stringify(sims), deviceId],
-    );
-  },
 };
 
 // ─── Device helpers ───────────────────────────────────────────────────────────
@@ -166,6 +156,17 @@ export const deviceDb = {
 
   async delete(id: string) {
     await pool.query('DELETE FROM devices WHERE id = $1', [id]);
+  },
+
+  async touchDeviceSeen(id: string): Promise<void> {
+    await pool.query(`UPDATE devices SET last_seen_at = NOW() WHERE id = $1`, [id]);
+  },
+
+  async updateSims(id: string, sims: any[]): Promise<void> {
+    await pool.query(
+      `UPDATE devices SET sims = $1, last_seen_at = NOW() WHERE id = $2`,
+      [JSON.stringify(sims), id],
+    );
   },
 };
 

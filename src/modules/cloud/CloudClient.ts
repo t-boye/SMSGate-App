@@ -14,7 +14,21 @@ type PendingJob = {
 };
 
 function toBase64(str: string): string {
-  return btoa(str);
+  // Manual base64 — btoa is available in Hermes but Buffer is not
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let result = '';
+  let i = 0;
+  while (i < str.length) {
+    const a = str.charCodeAt(i++);
+    const b = i < str.length ? str.charCodeAt(i++) : 0;
+    const c = i < str.length ? str.charCodeAt(i++) : 0;
+    result +=
+      chars[a >> 2] +
+      chars[((a & 3) << 4) | (b >> 4)] +
+      (i > str.length + 1 ? '=' : chars[((b & 15) << 2) | (c >> 6)]) +
+      (i > str.length ? '=' : chars[c & 63]);
+  }
+  return result;
 }
 
 function buildHeaders(settings: CloudSettings): Record<string, string> {
@@ -112,9 +126,7 @@ class CloudClient {
       const SmsSender = NativeModules.SmsSender;
       if (!SmsSender) return;
 
-      const sims: any[] = await new Promise((resolve, reject) =>
-        SmsSender.getSimCards((err: any, result: any) => err ? reject(err) : resolve(result))
-      ).catch(() => []);
+      const sims: any[] = await SmsSender.getSimCards().catch(() => []);
 
       if (!sims || sims.length === 0) return;
 
@@ -126,6 +138,15 @@ class CloudClient {
     } catch (e) {
       console.warn('[CloudClient] SIM report failed:', e);
     }
+  }
+
+  async reportStatus(messageId: string): Promise<void> {
+    try {
+      const settings = await settingsStore.loadCloud();
+      const hasAuth = (settings.login && settings.password) || settings.token;
+      if (!settings.enabled || !settings.url || !hasAuth) return;
+      await this._reportStatus(messageId, settings);
+    } catch {}
   }
 
   private async _reportStatus(messageId: string, settings: CloudSettings): Promise<void> {

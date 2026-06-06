@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { requireApiKey, requireDevice } from '../middleware/auth';
-import { pool, messageDb, userDb } from '../database';
+import { pool, messageDb, deviceDb, userDb } from '../database';
 import { SendMessageBody, UpdateMessageBody, PLANS } from '../types';
 
 const router = Router();
@@ -85,7 +85,7 @@ router.get('/pending', requireDevice, async (req: Request, res: Response) => {
     [device.id],
   );
 
-  await messageDb.touchDeviceSeen(device.id).catch(() => {});
+  await deviceDb.touchDeviceSeen(device.id).catch(() => {});
 
   const jobs = rows.map(r => ({
     id: r.id,
