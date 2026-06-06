@@ -120,6 +120,13 @@ export const messageDb = {
   async touchDeviceSeen(deviceId: string): Promise<void> {
     await pool.query(`UPDATE devices SET last_seen_at = NOW() WHERE id = $1`, [deviceId]);
   },
+
+  async updateSims(deviceId: string, sims: any[]): Promise<void> {
+    await pool.query(
+      `UPDATE devices SET sims = $1, last_seen_at = NOW() WHERE id = $2`,
+      [JSON.stringify(sims), deviceId],
+    );
+  },
 };
 
 // ─── Device helpers ───────────────────────────────────────────────────────────

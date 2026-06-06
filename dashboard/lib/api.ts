@@ -45,6 +45,13 @@ export const api = {
   messages: (token: string, limit = 50) =>
     apiFetch(`/api/v1/messages?limit=${limit}`, {}, token),
 
+  sendMessage: (token: string, data: {
+    message: string;
+    phoneNumbers: string[];
+    deviceId?: string;
+    simNumber?: number;
+  }) => apiFetch('/api/v1/messages', { method: 'POST', body: JSON.stringify(data) }, token),
+
   plans: () => apiFetch('/api/v1/paystack/plans'),
 
   initializePayment: (token: string, plan: string) =>
@@ -59,3 +66,5 @@ export const api = {
   changePassword: (token: string, data: { currentPassword: string; newPassword: string }) =>
     apiFetch('/api/v1/users/me/password', { method: 'POST', body: JSON.stringify(data) }, token),
 };
+
+export const API_BASE = API;

@@ -26,6 +26,13 @@ export interface UserRow {
   created_at: string;
 }
 
+export interface SimInfo {
+  slotIndex: number;
+  displayName: string;
+  phoneNumber: string;
+  subscriptionId: number;
+}
+
 export interface DeviceRow {
   id: string;
   user_id: string | null;
@@ -35,6 +42,7 @@ export interface DeviceRow {
   token: string;
   created_at: string;
   last_seen_at: string | null;
+  sims: SimInfo[] | null;
 }
 
 export interface ApiKeyRow {

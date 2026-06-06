@@ -1,245 +1,48 @@
 # SMSGate
 
-Turn your Android phone into a self-hosted SMS gateway. Send SMS from any app via a simple REST API — no Twilio, no monthly bills.
-
-**Live relay:** [sms-gate-app.vercel.app](https://sms-gate-app.vercel.app)
+Turn any Android phone into a self-hosted, programmable SMS gateway. Send SMS from any backend via a simple REST API — no Twilio, no monthly carrier fees.
 
 ---
 
-## How It Works
+## Architecture
 
 ```
 Your App / Backend
         │
-        │  POST /api/v1/messages
+        │  POST /api/v1/messages  (Bearer API key)
         ▼
-  Cloud Relay Server          ← hosted on Vercel (free)
-  sms-gate-app.vercel.app
+  Relay Server  ─────────────────── Dashboard (Next.js)
+  Express + PostgreSQL                /dashboard/send
         │
-        │  phone polls every 5 seconds
+        │  Android polls every 5 seconds
         ▼
   Android Phone (your device)
-        │
-        │  SmsManager API
+        │  SMSGate app running as foreground service
+        │  Reports SIM cards, picks up pending messages
         ▼
-  Recipient's phone  ✓ SMS delivered
-```
-
-Your Android phone acts as the SMS bridge. It needs mobile data or WiFi to poll the relay, and an active SIM to send messages.
-
----
-
-## Quick Start
-
-### 1. Install the App
-
-Visit **[sms-gate-app.vercel.app](https://sms-gate-app.vercel.app)** on your Android phone and tap **Download APK**, or scan the QR code.
-
-After installing:
-- Open the app
-- Grant SMS + notification permissions when prompted
-
-### 2. Create an Account
-
-In the app → **Settings → Cloud Server**:
-- Enable **Cloud Mode**: ON
-- Server URL is pre-filled: `https://sms-gate-app.vercel.app`
-- Tap **"No account yet? Create one"**
-- Fill in: Display Name, Username, Password → tap **Create Account**
-- Tap **Save Settings**
-
-The app now polls the relay every 5 seconds automatically.
-
-### 3. Get an API Key
-
-Contact the server admin to get a Bearer API key, or if you're self-hosting, create one via the admin endpoint:
-
-```bash
-curl -X POST https://your-relay.vercel.app/api/v1/keys \
-  -H "Authorization: Bearer YOUR_ADMIN_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"my-app"}'
-```
-
-Response:
-```json
-{ "key": "abc123...", "name": "my-app" }
-```
-
-### 4. Send Your First SMS
-
-```bash
-curl -X POST https://sms-gate-app.vercel.app/api/v1/messages \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "Hello from SMSGate!",
-    "phoneNumbers": ["+233244123456"]
-  }'
-```
-
-Response:
-```json
-{ "id": "uuid", "status": "queued" }
-```
-
-The phone picks it up within 5 seconds and sends the SMS.
-
----
-
-## API Reference
-
-**Base URL:** `https://sms-gate-app.vercel.app`
-
-### Authentication
-
-| Auth Type | Used For | Format |
-|-----------|----------|--------|
-| Bearer API Key | Submitting SMS jobs | `Authorization: Bearer <api_key>` |
-| Basic Auth | Device (phone app) auth | `Authorization: Basic base64(login:password)` |
-| Admin Key | Managing devices & keys | `Authorization: Bearer <admin_key>` |
-
-### Endpoints
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `POST` | `/api/v1/messages` | API Key | Submit an SMS job |
-| `GET` | `/api/v1/messages` | API Key | List all messages |
-| `GET` | `/api/v1/messages/:id` | API Key | Get message + delivery status |
-| `POST` | `/api/v1/auth/register` | None | Register a device account |
-| `GET` | `/health` | None | Server health check |
-
-### Send SMS — Request Body
-
-```json
-{
-  "message": "Your OTP is 1234",
-  "phoneNumbers": ["+233244123456", "+233201234567"],
-  "simNumber": 1
-}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `message` | string | Yes | SMS text content |
-| `phoneNumbers` | string[] | Yes | E.164 format (`+countrycode...`) |
-| `simNumber` | number | No | SIM slot: `1` or `2` (default: `1`) |
-
-### Message States
-
-| State | Meaning |
-|-------|---------|
-| `Pending` | Queued, waiting for phone to poll |
-| `Processed` | Phone claimed the job |
-| `Sent` | SMS dispatched from phone |
-| `Delivered` | Carrier confirmed delivery |
-| `Failed` | SMS failed to send |
-
----
-
-## Code Examples
-
-### JavaScript / Node.js
-
-```javascript
-async function sendSMS(phone, message) {
-  const res = await fetch('https://sms-gate-app.vercel.app/api/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer YOUR_API_KEY'
-    },
-    body: JSON.stringify({ message, phoneNumbers: [phone] })
-  });
-  const data = await res.json();
-  return data.id; // use to check status later
-}
-
-// Send OTP
-await sendSMS('+233244123456', 'Your verification code is 8472');
-```
-
-### Python
-
-```python
-import requests
-
-def send_sms(phone, message):
-    r = requests.post(
-        'https://sms-gate-app.vercel.app/api/v1/messages',
-        headers={
-            'Authorization': 'Bearer YOUR_API_KEY',
-            'Content-Type': 'application/json'
-        },
-        json={'message': message, 'phoneNumbers': [phone]}
-    )
-    r.raise_for_status()
-    return r.json()['id']
-
-send_sms('+233244123456', 'Your order has been confirmed.')
-```
-
-### PHP
-
-```php
-function sendSMS($phone, $message) {
-    $ch = curl_init('https://sms-gate-app.vercel.app/api/v1/messages');
-    curl_setopt_array($ch, [
-        CURLOPT_POST => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => [
-            'Content-Type: application/json',
-            'Authorization: Bearer YOUR_API_KEY'
-        ],
-        CURLOPT_POSTFIELDS => json_encode([
-            'message'      => $message,
-            'phoneNumbers' => [$phone]
-        ])
-    ]);
-    $res = curl_exec($ch);
-    curl_close($ch);
-    return json_decode($res, true)['id'];
-}
-
-sendSMS('+233244123456', 'Payment received. Thank you!');
-```
-
-### Check Delivery Status
-
-```javascript
-const status = await fetch(
-  `https://sms-gate-app.vercel.app/api/v1/messages/${messageId}`,
-  { headers: { 'Authorization': 'Bearer YOUR_API_KEY' } }
-).then(r => r.json());
-
-console.log(status.state); // "Sent", "Delivered", "Failed"
+  Recipient ✓ SMS delivered
 ```
 
 ---
 
 ## Features
 
-- **Cloud mode** — phone polls relay, works behind any NAT/firewall
-- **Local HTTP server** — direct REST API on Wi-Fi (no internet needed)
-- **Multi-SIM** — choose which SIM slot to send from
-- **Delivery tracking** — carrier receipts reported back to relay
-- **Webhooks** — HTTP POST on `sms:sent`, `sms:delivered`, `sms:received`, `sms:failed`
-- **AES-256-CBC encryption** — optional end-to-end encryption
-- **Incoming SMS logging** — received messages stored and forwarded
+- **REST API** — POST to send, GET to check delivery status
+- **Multi-tenant** — each account fully isolated; build your own service
+- **SIM card selection** — choose SIM 1 or SIM 2 per message
+- **Delivery receipts** — track every message: Pending → Sent → Delivered
+- **AES-256-CBC encryption** — optional end-to-end encrypted messages
+- **Dashboard** — web UI for sending, monitoring, devices, API keys, billing
 - **Foreground service** — survives Android background kills
-- **Auto-start on reboot** — gateway back up automatically after phone restarts
+- **Auto-start on reboot** — gateway restarts automatically after phone reboots
+- **Multi-device** — connect multiple phones per account
+- **Incoming SMS logging** — received messages stored and forwarded
 
 ---
 
-## Self-Hosting the Relay Server
+## Quick Start
 
-You can host your own relay instead of using `sms-gate-app.vercel.app`.
-
-### Requirements
-- Vercel account (free tier works)
-- Neon database (free tier: [neon.tech](https://neon.tech))
-
-### Deploy
+### 1. Set up the server
 
 ```bash
 git clone https://github.com/t-boye/SMSGate-App
@@ -249,43 +52,210 @@ cp .env.example .env
 
 Edit `.env`:
 ```env
-DATABASE_URL=postgresql://...   # your Neon connection string
-ADMIN_KEY=choose-a-strong-secret-key
+DATABASE_URL=postgresql://...   # Neon or any Postgres
+JWT_SECRET=change-this-to-a-long-random-string
+PAYSTACK_SECRET_KEY=sk_...      # optional — for billing
 ```
 
 ```bash
 npm install
-npm run db:migrate    # creates tables (run once)
-vercel deploy --prod
+npm run db:migrate              # creates tables (run once)
+npm run dev                     # development
+npm start                       # production (after npm run build)
 ```
 
-Point the Android app's **Server URL** to your new deployment.
-
-### Admin Operations
+### 2. Set up the dashboard
 
 ```bash
-# Create an API key for a client app
-curl -X POST https://your-relay.vercel.app/api/v1/keys \
-  -H "Authorization: Bearer YOUR_ADMIN_KEY" \
-  -d '{"name":"my-app"}'
+cd SMSGate-App/dashboard
+cp .env.local.example .env.local  # or create manually
+```
 
-# List registered devices
-curl https://your-relay.vercel.app/api/v1/devices \
-  -H "Authorization: Bearer YOUR_ADMIN_KEY"
+`.env.local`:
+```env
+NEXT_PUBLIC_API_URL=http://localhost:3000   # your server URL
+```
+
+```bash
+npm install
+npm run dev     # http://localhost:3001
+```
+
+### 3. Install the Android app
+
+Build the APK:
+```powershell
+# Windows — from SMSGate-App directory
+$env:ANDROID_HOME = "C:\Users\YOU\AppData\Local\Android\Sdk"
+cd android
+.\gradlew.bat assembleDebug -x test
+```
+
+Install on phone:
+```powershell
+adb install -r "app\build\outputs\apk\debug\app-debug.apk"
+```
+
+Open the app → **Settings → Cloud Server**:
+- Enable Cloud Mode
+- Enter your server URL and device credentials from the dashboard
+
+### 4. Send your first SMS
+
+```bash
+# 1. Get a device token from Settings → Cloud Server in the app
+# 2. Log in to the dashboard and create an API key
+# 3. Send:
+
+curl -X POST https://your-server.com/api/v1/messages \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Hello from SMSGate!","phoneNumbers":["+233244123456"]}'
+```
+
+Response:
+```json
+{ "id": "uuid", "status": "queued" }
+```
+
+The phone picks it up within 5 seconds.
+
+---
+
+## REST API Reference
+
+**Base URL:** `https://your-server.com`
+
+### Authentication
+
+All API requests require a Bearer token:
+```
+Authorization: Bearer YOUR_API_KEY
+```
+Get your API key from the **API Keys** section in the dashboard.
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/messages` | Send an SMS |
+| `GET`  | `/api/v1/messages` | List messages (last 50) |
+| `GET`  | `/api/v1/messages/:id` | Get message + delivery status |
+| `GET`  | `/api/v1/devices` | List your devices and SIM cards |
+| `GET`  | `/health` | Server health check |
+
+### Send SMS — Request
+
+```json
+{
+  "message": "Your OTP is 1234",
+  "phoneNumbers": ["+233244123456", "+233201234567"],
+  "simNumber": 1,
+  "deviceId": "optional-device-uuid"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `message` | string | Yes | SMS text |
+| `phoneNumbers` | string[] | Yes | E.164 format (`+countrycode...`) |
+| `simNumber` | number | No | SIM slot: `1` or `2` (default: primary SIM) |
+| `deviceId` | string | No | Route to a specific device |
+
+### Message States
+
+| State | Meaning |
+|-------|---------|
+| `Pending` | Queued — waiting for a device to poll |
+| `Processed` | Device claimed it and is sending |
+| `Sent` | Handed off to the carrier |
+| `Delivered` | Carrier confirmed delivery |
+| `Failed` | Could not be sent |
+
+---
+
+## Code Examples
+
+### JavaScript / Node.js
+
+```javascript
+const res = await fetch('https://your-server.com/api/v1/messages', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer YOUR_API_KEY',
+  },
+  body: JSON.stringify({
+    message: 'Your verification code is 8472',
+    phoneNumbers: ['+233244123456'],
+    simNumber: 1,
+  }),
+});
+const { id } = await res.json();
+```
+
+### Python
+
+```python
+import requests
+
+r = requests.post(
+    'https://your-server.com/api/v1/messages',
+    headers={'Authorization': 'Bearer YOUR_API_KEY'},
+    json={
+        'message': 'Your order has been confirmed.',
+        'phoneNumbers': ['+233244123456'],
+    }
+)
+print(r.json()['id'])
+```
+
+### PHP
+
+```php
+$ch = curl_init('https://your-server.com/api/v1/messages');
+curl_setopt_array($ch, [
+    CURLOPT_POST => true,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => [
+        'Content-Type: application/json',
+        'Authorization: Bearer YOUR_API_KEY',
+    ],
+    CURLOPT_POSTFIELDS => json_encode([
+        'message'      => 'Payment received.',
+        'phoneNumbers' => ['+233244123456'],
+    ]),
+]);
+echo curl_exec($ch);
 ```
 
 ---
 
-## Releasing a New APK
+## Dashboard Pages
 
-Tag a release to trigger GitHub Actions:
+| Page | Description |
+|------|-------------|
+| `/dashboard` | Overview — usage stats, quick start |
+| `/dashboard/send` | Send SMS from the web UI with SIM selection |
+| `/dashboard/devices` | Manage Android devices |
+| `/dashboard/keys` | Create and manage API keys |
+| `/dashboard/messages` | Message log with delivery status |
+| `/dashboard/billing` | Plans and Paystack payment |
+| `/dashboard/docs` | Full API reference |
+| `/dashboard/settings` | Profile, password, plan limits |
 
-```bash
-git tag v1.0.5
-git push origin v1.0.5
-```
+---
 
-The workflow builds the APK and publishes it to GitHub Releases. The landing page at your relay URL always links to the latest release.
+## Plans
+
+| Plan | SMS/month | Devices | API Keys |
+|------|-----------|---------|----------|
+| Free | 100 | 1 | 1 |
+| Basic | 5,000 | 3 | 5 |
+| Pro | 30,000 | 10 | ∞ |
+| Business | ∞ | ∞ | ∞ |
+
+Payments via Paystack (GHS).
 
 ---
 
@@ -293,9 +263,9 @@ The workflow builds the APK and publishes it to GitHub Releases. The landing pag
 
 | Item | Requirement |
 |------|-------------|
-| Android version | 7.0+ (API 24+) |
+| Android | 7.0+ (API 24+) |
 | Permissions | SMS, Receive SMS, Read Phone State, Notifications |
-| Network | Mobile data or WiFi (for cloud polling) |
+| Network | Mobile data or WiFi |
 | SIM | Active SIM with SMS capability |
 
 ---
@@ -304,9 +274,11 @@ The workflow builds the APK and publishes it to GitHub Releases. The landing pag
 
 | Layer | Technology |
 |-------|-----------|
-| Android app | React Native 0.84 + Kotlin |
-| SMS engine | Android SmsManager |
-| Local server | NanoHTTPD (embedded HTTP) |
-| Message storage | AsyncStorage (in-memory + persisted) |
-| Relay server | Express.js + Neon (Postgres) on Vercel |
+| Android app | React Native 0.84, TypeScript, Old Architecture |
+| SMS engine | Android SmsManager (Kotlin) |
+| Local HTTP server | NanoHTTPD (embedded) |
+| SQLite storage | op-sqlite v11 |
+| Relay server | Express.js + PostgreSQL (Neon) |
+| Dashboard | Next.js 16 (App Router, Turbopack), Tailwind CSS |
 | Encryption | AES-256-CBC via crypto-js |
+| Billing | Paystack |

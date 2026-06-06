@@ -1,29 +1,68 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
-import { requireAdmin, requireUser } from '../middleware/auth';
+import { requireAdmin, requireUser, requireDevice, requireApiKey } from '../middleware/auth';
 import { deviceDb, apiKeyDb } from '../database';
 import { CreateDeviceBody, CreateApiKeyBody, PLANS } from '../types';
 
 const router = Router();
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function formatDevice(d: any) {
+  const sims = d.sims
+    ? (typeof d.sims === 'string' ? JSON.parse(d.sims) : d.sims)
+    : [];
+  return {
+    id:          d.id,
+    name:        d.name,
+    login:       d.login,
+    token:       d.token,
+    sims,
+    createdAt:   d.created_at,
+    lastSeenAt:  d.last_seen_at,
+    isOnline:    d.last_seen_at
+      ? (Date.now() - new Date(d.last_seen_at).getTime()) < 30_000
+      : false,
+  };
+}
+
 // ─── Devices (user-scoped) ────────────────────────────────────────────────────
 
-// GET /api/v1/devices — user sees their own devices; admin sees all
-router.get('/devices', requireUser, async (req: Request, res: Response) => {
-  const devices = await deviceDb.list(req.user!.id);
-  res.json(devices.map((d: any) => ({
-    id: d.id,
-    name: d.name,
-    login: d.login,
-    token: d.token,
-    createdAt: d.created_at,
-    lastSeenAt: d.last_seen_at,
-    isOnline: d.last_seen_at ? (Date.now() - new Date(d.last_seen_at).getTime()) < 30_000 : false,
-  })));
+// GET /api/v1/devices — works with both user JWT and API key
+router.get('/devices', async (req: Request, res: Response) => {
+  // Try user JWT first, then API key
+  const authHeader = req.headers['authorization'] ?? '';
+  if (!authHeader) { res.status(401).json({ error: 'Authentication required' }); return; }
+
+  let userId: string | null = null;
+
+  if (authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    // Try API key first (32-char hex), then JWT
+    const key = await apiKeyDb.get(token);
+    if (key?.user_id) {
+      userId = key.user_id;
+    } else {
+      // Fall through to user JWT check via requireUser — replicate inline
+      try {
+        const jwt = require('jsonwebtoken');
+        const secret = process.env.JWT_SECRET;
+        if (secret) {
+          const payload = jwt.verify(token, secret) as { sub: string };
+          userId = payload.sub;
+        }
+      } catch {}
+    }
+  }
+
+  if (!userId) { res.status(401).json({ error: 'Invalid credentials' }); return; }
+
+  const devices = await deviceDb.list(userId);
+  res.json(devices.map(formatDevice));
 });
 
-// POST /api/v1/devices — user registers a device under their account
+// POST /api/v1/devices
 router.post('/devices', requireUser, async (req: Request, res: Response) => {
   const { name, login, password } = req.body as CreateDeviceBody;
   if (!name || !login || !password) {
@@ -47,20 +86,33 @@ router.post('/devices', requireUser, async (req: Request, res: Response) => {
     }
   }
 
-  const id = uuidv4();
+  const id           = uuidv4();
   const passwordHash = await bcrypt.hash(password, 10);
-  const token = uuidv4().replace(/-/g, '');
+  const token        = uuidv4().replace(/-/g, '');
 
   await deviceDb.create({ id, userId: req.user!.id, name, login, passwordHash, token });
   res.status(201).json({ id, name, login, token });
 });
 
-// DELETE /api/v1/devices/:id — user can only delete their own device
+// DELETE /api/v1/devices/:id
 router.delete('/devices/:id', requireUser, async (req: Request, res: Response) => {
   const device = await deviceDb.getById(req.params.id);
   if (!device) { res.status(404).json({ error: 'Not found' }); return; }
   if (device.user_id !== req.user!.id) { res.status(403).json({ error: 'Forbidden' }); return; }
   await deviceDb.delete(req.params.id);
+  res.json({ ok: true });
+});
+
+// ─── Device heartbeat — Android app reports SIM cards ────────────────────────
+
+// POST /api/v1/devices/heartbeat
+router.post('/devices/heartbeat', requireDevice, async (req: Request, res: Response) => {
+  const { sims } = req.body as { sims?: any[] };
+  if (Array.isArray(sims) && sims.length > 0) {
+    await deviceDb.updateSims(req.device!.id, sims);
+  } else {
+    await deviceDb.touchDeviceSeen(req.device!.id);
+  }
   res.json({ ok: true });
 });
 
@@ -91,10 +143,10 @@ router.post('/keys', requireUser, async (req: Request, res: Response) => {
 
   const key = uuidv4().replace(/-/g, '');
   await apiKeyDb.create(key, name, req.user!.id);
-  res.status(201).json({ key, name });
+  res.status(201).json({ key, name, createdAt: new Date().toISOString() });
 });
 
-// DELETE /api/v1/keys/:key — user can only delete their own keys
+// DELETE /api/v1/keys/:key
 router.delete('/keys/:key', requireUser, async (req: Request, res: Response) => {
   const existing = await apiKeyDb.get(req.params.key);
   if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
@@ -103,20 +155,12 @@ router.delete('/keys/:key', requireUser, async (req: Request, res: Response) => 
   res.json({ ok: true });
 });
 
-// ─── Admin-only routes (full access) ─────────────────────────────────────────
+// ─── Admin ────────────────────────────────────────────────────────────────────
 
-router.get('/admin/devices', requireAdmin, async (_req: Request, res: Response) => {
-  const devices = await deviceDb.list();
-  res.json(devices);
+router.get('/admin/devices', requireAdmin, async (_req, res) => res.json(await deviceDb.list()));
+router.delete('/admin/devices/:id', requireAdmin, async (req, res) => {
+  await deviceDb.delete(req.params.id); res.json({ ok: true });
 });
-
-router.delete('/admin/devices/:id', requireAdmin, async (req: Request, res: Response) => {
-  await deviceDb.delete(req.params.id);
-  res.json({ ok: true });
-});
-
-router.get('/admin/keys', requireAdmin, async (_req: Request, res: Response) => {
-  res.json(await apiKeyDb.list());
-});
+router.get('/admin/keys', requireAdmin, async (_req, res) => res.json(await apiKeyDb.list()));
 
 export default router;

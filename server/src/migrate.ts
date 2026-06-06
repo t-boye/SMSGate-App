@@ -34,6 +34,7 @@ async function migrate() {
     );
 
     ALTER TABLE devices ADD COLUMN IF NOT EXISTS user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
+    ALTER TABLE devices ADD COLUMN IF NOT EXISTS sims JSONB;
   `);
 
   // ── API Keys ─────────────────────────────────────────────────────────────────

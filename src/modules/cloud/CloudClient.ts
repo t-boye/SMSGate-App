@@ -1,3 +1,4 @@
+import {NativeModules} from 'react-native';
 import {messageStore} from '../storage/MessageStore';
 import {sendSms} from '../sms/SmsSender';
 import {settingsStore} from '../settings/SettingsStore';
@@ -13,7 +14,6 @@ type PendingJob = {
 };
 
 function toBase64(str: string): string {
-  // btoa is available in Hermes (RN 0.71+); Buffer is Node-only and not available
   return btoa(str);
 }
 
@@ -30,12 +30,14 @@ function buildHeaders(settings: CloudSettings): Record<string, string> {
 class CloudClient {
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private pollInterval = 5000;
+  private simsReported = false;
 
   constructor() {
     this._schedulePoll(3000);
   }
 
   connect(): void {
+    this.simsReported = false;
     this._schedulePoll(0);
   }
 
@@ -47,10 +49,17 @@ class CloudClient {
   private async _poll(): Promise<void> {
     try {
       const settings = await settingsStore.loadCloud();
+      const hasAuth  = (settings.login && settings.password) || settings.token;
 
-      const hasAuth = (settings.login && settings.password) || settings.token;
       if (settings.enabled && settings.url && hasAuth) {
         const headers = buildHeaders(settings);
+
+        // Report SIM cards once per connection so the server knows what SIMs are available
+        if (!this.simsReported) {
+          await this._reportSims(settings, headers);
+          this.simsReported = true;
+        }
+
         const res = await fetch(`${settings.url}/api/v1/messages/pending`, {headers});
 
         if (res.ok) {
@@ -70,21 +79,18 @@ class CloudClient {
                 messageId: job.id,
                 phoneNumbers: job.phoneNumbers,
                 body: job.message,
-                simSlot: job.simNumber ? job.simNumber - 1 : undefined,
+                simSlot: job.simNumber != null ? job.simNumber - 1 : undefined,
               });
               await this._reportStatus(job.id, settings);
             } catch (e) {
               console.error('[CloudClient] Job failed:', e);
-              // Report failure back so it shows as Failed on the server instead of staying Pending
               try {
                 const msg = messageStore.getMessage(job.id);
                 if (!msg) {
-                  // Message wasn't inserted yet — insert it as Failed so server gets a state
                   messageStore.insertMessage({id: job.id, body: job.message, state: 'Failed', source: 'cloud'});
                 }
                 for (const phone of job.phoneNumbers) {
-                  const rid = `${job.id}_fail`;
-                  messageStore.insertRecipient({id: rid, messageId: job.id, phone, state: 'Failed'});
+                  messageStore.insertRecipient({id: `${job.id}_fail`, messageId: job.id, phone, state: 'Failed'});
                 }
                 await this._reportStatus(job.id, settings);
               } catch {}
@@ -99,6 +105,27 @@ class CloudClient {
     }
 
     this._schedulePoll(this.pollInterval);
+  }
+
+  private async _reportSims(settings: CloudSettings, headers: Record<string, string>): Promise<void> {
+    try {
+      const SmsSender = NativeModules.SmsSender;
+      if (!SmsSender) return;
+
+      const sims: any[] = await new Promise((resolve, reject) =>
+        SmsSender.getSimCards((err: any, result: any) => err ? reject(err) : resolve(result))
+      ).catch(() => []);
+
+      if (!sims || sims.length === 0) return;
+
+      await fetch(`${settings.url}/api/v1/devices/heartbeat`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({sims}),
+      });
+    } catch (e) {
+      console.warn('[CloudClient] SIM report failed:', e);
+    }
   }
 
   private async _reportStatus(messageId: string, settings: CloudSettings): Promise<void> {
@@ -119,6 +146,7 @@ class CloudClient {
   disconnect(): void {
     if (this.pollTimer) clearTimeout(this.pollTimer);
     this.pollTimer = null;
+    this.simsReported = false;
   }
 }
 
