@@ -12,12 +12,12 @@ Your App / Backend
         │  POST /api/v1/messages  (Bearer API key)
         ▼
   Relay Server  ─────────────────── Dashboard (Next.js)
-  Express + PostgreSQL                /dashboard/send
+  Express + PostgreSQL                /dashboard/*
+  deployed on Vercel                  deployed on Vercel
         │
         │  Android polls every 5 seconds
         ▼
-  Android Phone (your device)
-        │  SMSGate app running as foreground service
+  Android Phone (SMSGate app)
         │  Reports SIM cards, picks up pending messages
         ▼
   Recipient ✓ SMS delivered
@@ -28,7 +28,7 @@ Your App / Backend
 ## Features
 
 - **REST API** — POST to send, GET to check delivery status
-- **Multi-tenant** — each account fully isolated; build your own service
+- **Multi-tenant** — each account fully isolated; build your own SMS service
 - **SIM card selection** — choose SIM 1 or SIM 2 per message
 - **Delivery receipts** — track every message: Pending → Sent → Delivered
 - **AES-256-CBC encryption** — optional end-to-end encrypted messages
@@ -40,74 +40,99 @@ Your App / Backend
 
 ---
 
-## Quick Start
+## Live Deployment
 
-### 1. Set up the server
+| Component | URL |
+|-----------|-----|
+| API server | https://sms-gate-app.vercel.app |
+| Dashboard | Deploy your own (see below) |
+
+The **API server** is already live. The **dashboard** is a separate Vercel project you deploy from the `dashboard/` folder — it connects to the server via `NEXT_PUBLIC_API_URL`.
+
+---
+
+## Deploy to Vercel
+
+The server and dashboard are two separate Vercel projects from the same repo, both on Vercel free tier with a Neon PostgreSQL database.
+
+### Step 1 — Database (Neon)
+
+1. Create a free account at [neon.tech](https://neon.tech)
+2. Create a new project → copy the **Connection string** (it looks like `postgresql://user:pass@host/db?sslmode=require`)
+3. Run the migration once from your local machine:
 
 ```bash
-git clone https://github.com/t-boye/SMSGate-App
-cd SMSGate-App/server
+cd server
 cp .env.example .env
-```
-
-Edit `.env`:
-```env
-DATABASE_URL=postgresql://...   # Neon or any Postgres
-JWT_SECRET=change-this-to-a-long-random-string
-PAYSTACK_SECRET_KEY=sk_...      # optional — for billing
-```
-
-```bash
+# paste your DATABASE_URL and JWT_SECRET into .env
 npm install
-npm run db:migrate              # creates tables (run once)
-npm run dev                     # development
-npm start                       # production (after npm run build)
+npm run db:migrate
 ```
 
-### 2. Set up the dashboard
+### Step 2 — Deploy the API server
 
-```bash
-cd SMSGate-App/dashboard
-cp .env.local.example .env.local  # or create manually
-```
+1. Push this repo to GitHub
+2. Go to [vercel.com](https://vercel.com) → **Add New Project** → import your repo
+3. Set **Root Directory** to `server`
+4. Add these **Environment Variables** in Vercel project settings:
 
-`.env.local`:
-```env
-NEXT_PUBLIC_API_URL=http://localhost:3000   # your server URL
-```
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Your Neon connection string |
+| `JWT_SECRET` | A long random string (`openssl rand -hex 32`) |
+| `PAYSTACK_SECRET_KEY` | From your Paystack dashboard (optional) |
+| `APP_URL` | Your server Vercel URL (e.g. `https://sms-gate-app.vercel.app`) |
+| `DASHBOARD_URL` | Your dashboard Vercel URL |
 
-```bash
-npm install
-npm run dev     # http://localhost:3001
-```
+5. Deploy — Vercel will auto-build with `server/vercel.json`
+6. Note your server URL (e.g. `https://sms-gate-app.vercel.app`)
 
-### 3. Install the Android app
+### Step 3 — Deploy the dashboard
 
-Build the APK:
+1. Go to Vercel → **Add New Project** → import the same repo again
+2. Set **Root Directory** to `dashboard`
+3. Add this **Environment Variable**:
+
+| Variable | Value |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | Your server URL from Step 2 (no trailing slash) |
+
+4. Deploy — Vercel auto-detects Next.js
+5. Open the dashboard URL → register your account
+
+### Step 4 — Install the Android app
+
+Build the APK from source:
+
 ```powershell
-# Windows — from SMSGate-App directory
+# Windows — from repo root
 $env:ANDROID_HOME = "C:\Users\YOU\AppData\Local\Android\Sdk"
 cd android
 .\gradlew.bat assembleDebug -x test
 ```
+
+Or grab the pre-built APK from [Releases](https://github.com/t-boye/SMSGate-App/releases).
 
 Install on phone:
 ```powershell
 adb install -r "app\build\outputs\apk\debug\app-debug.apk"
 ```
 
-Open the app → **Settings → Cloud Server**:
-- Enable Cloud Mode
-- Enter your server URL and device credentials from the dashboard
+### Step 5 — Connect your phone
 
-### 4. Send your first SMS
+1. Open the SMSGate app
+2. Go to **Settings → Cloud Server**
+3. Enable Cloud Mode
+4. Enter your **Server URL** (from Step 2)
+5. Enter the **Login** and **Password** you set in the dashboard → Devices
+6. Your device appears as **Online** in the dashboard
+
+### Step 6 — Send your first SMS
 
 ```bash
-# 1. Get a device token from Settings → Cloud Server in the app
-# 2. Log in to the dashboard and create an API key
-# 3. Send:
-
-curl -X POST https://your-server.com/api/v1/messages \
+# 1. In the dashboard → API Keys → create a key
+# 2. Send:
+curl -X POST https://sms-gate-app.vercel.app/api/v1/messages \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"message":"Hello from SMSGate!","phoneNumbers":["+233244123456"]}'
@@ -118,13 +143,13 @@ Response:
 { "id": "uuid", "status": "queued" }
 ```
 
-The phone picks it up within 5 seconds.
+The phone picks it up within 5 seconds and SMS is sent.
 
 ---
 
 ## REST API Reference
 
-**Base URL:** `https://your-server.com`
+**Base URL:** `https://sms-gate-app.vercel.app`
 
 ### Authentication
 
@@ -132,6 +157,7 @@ All API requests require a Bearer token:
 ```
 Authorization: Bearer YOUR_API_KEY
 ```
+
 Get your API key from the **API Keys** section in the dashboard.
 
 ### Endpoints
@@ -144,7 +170,7 @@ Get your API key from the **API Keys** section in the dashboard.
 | `GET`  | `/api/v1/devices` | List your devices and SIM cards |
 | `GET`  | `/health` | Server health check |
 
-### Send SMS — Request
+### Send SMS — Request body
 
 ```json
 {
@@ -166,7 +192,7 @@ Get your API key from the **API Keys** section in the dashboard.
 
 | State | Meaning |
 |-------|---------|
-| `Pending` | Queued — waiting for a device to poll |
+| `Pending` | Queued — waiting for a device to pick it up |
 | `Processed` | Device claimed it and is sending |
 | `Sent` | Handed off to the carrier |
 | `Delivered` | Carrier confirmed delivery |
@@ -179,7 +205,7 @@ Get your API key from the **API Keys** section in the dashboard.
 ### JavaScript / Node.js
 
 ```javascript
-const res = await fetch('https://your-server.com/api/v1/messages', {
+const res = await fetch('https://sms-gate-app.vercel.app/api/v1/messages', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -200,7 +226,7 @@ const { id } = await res.json();
 import requests
 
 r = requests.post(
-    'https://your-server.com/api/v1/messages',
+    'https://sms-gate-app.vercel.app/api/v1/messages',
     headers={'Authorization': 'Bearer YOUR_API_KEY'},
     json={
         'message': 'Your order has been confirmed.',
@@ -213,7 +239,7 @@ print(r.json()['id'])
 ### PHP
 
 ```php
-$ch = curl_init('https://your-server.com/api/v1/messages');
+$ch = curl_init('https://sms-gate-app.vercel.app/api/v1/messages');
 curl_setopt_array($ch, [
     CURLOPT_POST => true,
     CURLOPT_RETURNTRANSFER => true,
@@ -259,6 +285,38 @@ Payments via Paystack (GHS).
 
 ---
 
+## Local Development
+
+### Server
+
+```bash
+cd server
+cp .env.example .env   # fill in DATABASE_URL, JWT_SECRET
+npm install
+npm run db:migrate     # run once
+npm run dev            # http://localhost:3000
+```
+
+### Dashboard
+
+```bash
+cd dashboard
+# create .env.local with:
+# NEXT_PUBLIC_API_URL=http://localhost:3000
+npm install
+npm run dev            # http://localhost:3001
+```
+
+### Android app
+
+```bash
+npm install            # from repo root
+npm start              # Metro bundler
+npm run android        # build & run on device
+```
+
+---
+
 ## Requirements
 
 | Item | Requirement |
@@ -277,8 +335,8 @@ Payments via Paystack (GHS).
 | Android app | React Native 0.84, TypeScript, Old Architecture |
 | SMS engine | Android SmsManager (Kotlin) |
 | Local HTTP server | NanoHTTPD (embedded) |
-| SQLite storage | op-sqlite v11 |
 | Relay server | Express.js + PostgreSQL (Neon) |
 | Dashboard | Next.js 16 (App Router, Turbopack), Tailwind CSS |
+| Hosting | Vercel (server + dashboard) |
 | Encryption | AES-256-CBC via crypto-js |
 | Billing | Paystack |
