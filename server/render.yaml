@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: smsgate-server
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false        # set in Render dashboard
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PAYSTACK_SECRET_KEY
+        sync: false        # set in Render dashboard
+      - key: DASHBOARD_URL
+        value: https://sms-gate-app-t3ay.vercel.app
+      - key: ADMIN_KEY
+        generateValue: true
+      - key: RESEND_API_KEY
+        sync: false        # set in Render dashboard (optional, for password reset emails)
+      - key: RESEND_FROM
+        value: SMSGate <noreply@smsgate.app>
+    healthCheckPath: /health

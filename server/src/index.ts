@@ -37,9 +37,7 @@ app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'Not found' });
 });
 
-if (process.env.NODE_ENV !== 'production') {
-  const PORT = Number(process.env.PORT ?? 3000);
-  app.listen(PORT, () => console.log(`SMS Gateway server running on http://localhost:${PORT}`));
-}
+const PORT = Number(process.env.PORT ?? 3001);
+app.listen(PORT, () => console.log(`SMS Gateway server running on http://localhost:${PORT}`));
 
 export default app;

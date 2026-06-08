@@ -45,9 +45,9 @@ Your App / Backend
 | Component | URL |
 |-----------|-----|
 | API server | https://sms-gate-app.vercel.app |
-| Dashboard | Deploy your own (see below) |
+| Dashboard | https://sms-gate-app-t3ay.vercel.app |
 
-The **API server** is already live. The **dashboard** is a separate Vercel project you deploy from the `dashboard/` folder — it connects to the server via `NEXT_PUBLIC_API_URL`.
+Both are live on Vercel — same GitHub repo, two separate Vercel projects (different root directories).
 
 ---
 
@@ -98,7 +98,7 @@ npm run db:migrate
 | `NEXT_PUBLIC_API_URL` | Your server URL from Step 2 (no trailing slash) |
 
 4. Deploy — Vercel auto-detects Next.js
-5. Open the dashboard URL → register your account
+5. Open https://sms-gate-app-t3ay.vercel.app → register your account
 
 ### Step 4 — Install the Android app
 

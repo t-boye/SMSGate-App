@@ -3,10 +3,10 @@ import { Response } from 'express';
 // ─── Plans ────────────────────────────────────────────────────────────────────
 
 export const PLANS = {
-  free:     { name: 'Free',     smsLimit: 100,    deviceLimit: 1,  keyLimit: 1,  price: 0   },
-  basic:    { name: 'Basic',    smsLimit: 5_000,  deviceLimit: 3,  keyLimit: 5,  price: 15  },
-  pro:      { name: 'Pro',      smsLimit: 30_000, deviceLimit: 10, keyLimit: -1, price: 49  },
-  business: { name: 'Business', smsLimit: -1,     deviceLimit: -1, keyLimit: -1, price: 149 },
+  free:     { name: 'Free',     smsLimit: 100,    deviceLimit: 1,  keyLimit: 1,  price: 0  },
+  basic:    { name: 'Basic',    smsLimit: 5_000,  deviceLimit: 3,  keyLimit: 5,  price: 1  },
+  pro:      { name: 'Pro',      smsLimit: 30_000, deviceLimit: 10, keyLimit: -1, price: 4  },
+  business: { name: 'Business', smsLimit: -1,     deviceLimit: -1, keyLimit: -1, price: 9  },
 } as const;
 
 export type PlanName = keyof typeof PLANS;
@@ -19,11 +19,22 @@ export interface UserRow {
   name: string;
   password_hash: string;
   plan: PlanName;
+  plan_expires_at: string | null;
   sms_used_month: number;
   sms_reset_at: string;
   paystack_customer_code: string | null;
   paystack_subscription_code: string | null;
+  reset_token: string | null;
+  reset_token_expires: string | null;
   created_at: string;
+}
+
+/** Returns the plan that is actually active right now (downgrades to free if expired). */
+export function effectivePlan(user: UserRow): PlanName {
+  if (user.plan === 'free') return 'free';
+  if (!user.plan_expires_at) return 'free';
+  if (new Date(user.plan_expires_at) <= new Date()) return 'free';
+  return user.plan;
 }
 
 export interface SimInfo {

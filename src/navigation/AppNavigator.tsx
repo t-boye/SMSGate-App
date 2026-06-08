@@ -10,18 +10,19 @@ import SettingsScreen from '../screens/SettingsScreen';
 const Tab = createBottomTabNavigator();
 
 const TAB_ICONS: Record<string, string> = {
-  Home: '◈',
-  Messages: '⊠',
-  Settings: '⊙',
+  Home:     '⌂',
+  Messages: '✉',
+  Settings: '⚙',
 };
 
 function TabIcon({name, focused}: {name: string; focused: boolean}) {
   return (
     <View style={styles.iconWrap}>
-      <Text style={[styles.icon, focused && styles.iconFocused]}>
-        {TAB_ICONS[name]}
-      </Text>
-      {focused && <View style={styles.dot} />}
+      <View style={[styles.iconBg, focused && styles.iconBgFocused]}>
+        <Text style={[styles.icon, focused && styles.iconFocused]}>
+          {TAB_ICONS[name]}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -105,23 +106,26 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderTopColor: Colors.surfaceBorder,
     borderTopWidth: 1,
-    height: 64,
-    paddingBottom: 8,
-    paddingTop: 8,
+    height: 68,
+    paddingBottom: 10,
+    paddingTop: 6,
   },
   tabItem: {gap: 2},
-  iconWrap: {alignItems: 'center', gap: 4},
+  iconWrap: {alignItems: 'center'},
+  iconBg: {
+    width: 36, height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBgFocused: {
+    backgroundColor: 'rgba(34,197,94,0.12)',
+  },
   icon: {
-    fontSize: 20,
+    fontSize: 18,
     color: Colors.textMuted,
   },
   iconFocused: {color: Colors.gold},
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.gold,
-  },
   label: {
     fontSize: Typography.xs,
     fontWeight: Typography.medium,

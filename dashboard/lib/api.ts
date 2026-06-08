@@ -65,6 +65,12 @@ export const api = {
 
   changePassword: (token: string, data: { currentPassword: string; newPassword: string }) =>
     apiFetch('/api/v1/users/me/password', { method: 'POST', body: JSON.stringify(data) }, token),
+
+  forgotPassword: (email: string) =>
+    apiFetch('/api/v1/users/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+
+  resetPassword: (token: string, password: string) =>
+    apiFetch('/api/v1/users/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
 };
 
 export const API_BASE = API;

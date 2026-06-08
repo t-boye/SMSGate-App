@@ -103,16 +103,35 @@ export default function HomeScreen() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}>
 
-      {/* ── Header Banner ── */}
+      {/* ── App Header ── */}
+      <View style={styles.appHeader}>
+        <View style={styles.appHeaderLeft}>
+          <View style={styles.logoWrap}>
+            <Image
+              source={require('../assets/logo.png')}
+              style={styles.logoImg}
+              resizeMode="contain"
+            />
+          </View>
+          <View>
+            <Text style={styles.appName}>SMSGate</Text>
+            <Text style={styles.appTagline}>SMS Gateway</Text>
+          </View>
+        </View>
+        <View style={styles.statusPill}>
+          <View style={[styles.statusDot, {backgroundColor: cloud.enabled || localServer.enabled ? Colors.success : Colors.textMuted}]} />
+          <Text style={styles.statusPillText}>
+            {cloud.enabled ? 'Cloud' : localServer.enabled ? 'Local' : 'Standby'}
+          </Text>
+        </View>
+      </View>
+
+      {/* ── Total Banner ── */}
       <View style={styles.banner}>
         <View style={styles.bannerLeft}>
-          <Image
-            source={require('../assets/logo.png')}
-            style={styles.bannerLogo}
-            resizeMode="contain"
-          />
           <Text style={styles.bannerLabel}>TOTAL MESSAGES</Text>
           <Text style={styles.bannerValue}>{total}</Text>
+          <Text style={styles.bannerSub}>all time across all states</Text>
         </View>
         <View style={styles.bannerDivider} />
         <View style={styles.bannerRight}>
@@ -207,6 +226,56 @@ const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.bg},
   content: {padding: Spacing.md, paddingBottom: Spacing.xl, gap: Spacing.sm},
 
+  // App Header
+  appHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  appHeaderLeft: {flexDirection: 'row', alignItems: 'center', gap: 10},
+  logoWrap: {
+    width: 40, height: 40,
+    borderRadius: 11,
+    backgroundColor: 'rgba(34,197,94,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  logoImg: {width: 28, height: 28},
+  appName: {
+    fontSize: Typography.base,
+    fontWeight: Typography.bold,
+    color: Colors.textPrimary,
+    letterSpacing: -0.3,
+  },
+  appTagline: {
+    fontSize: Typography.xs,
+    color: Colors.gold,
+    letterSpacing: 0.5,
+    fontWeight: Typography.semibold,
+    marginTop: 1,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: Colors.surfaceElevated,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: Colors.surfaceBorder,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  statusPillText: {
+    fontSize: Typography.xs,
+    color: Colors.textSecondary,
+    fontWeight: Typography.medium,
+  },
+
   // Banner
   banner: {
     flexDirection: 'row',
@@ -219,9 +288,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bannerLeft: {flex: 1},
-  bannerLogo: {height: 44, width: 110, marginBottom: 6},
   bannerLabel: {fontSize: Typography.xs, fontWeight: Typography.semibold, color: Colors.textMuted, letterSpacing: 1.2},
   bannerValue: {fontSize: Typography['3xl'], fontWeight: Typography.bold, color: Colors.gold, marginTop: 2},
+  bannerSub: {fontSize: Typography.xs, color: Colors.textMuted, marginTop: 3},
   bannerDivider: {width: 1, height: 40, backgroundColor: Colors.surfaceBorder, marginHorizontal: Spacing.md},
   bannerRight: {flex: 1, alignItems: 'flex-end'},
   bannerStatusRow: {flexDirection: 'row', alignItems: 'center', gap: 6},

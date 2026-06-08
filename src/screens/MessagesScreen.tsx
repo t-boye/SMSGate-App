@@ -1,7 +1,7 @@
 import React, {useState} from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Modal, ScrollView, RefreshControl,
+  Modal, ScrollView, RefreshControl, Image,
 } from 'react-native';
 import {Colors, Typography, Spacing, Radius} from '../theme';
 import {Message, MessageState, MessageRecipient} from '../types';
@@ -170,6 +170,17 @@ export default function MessagesScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Screen Header */}
+      <View style={styles.screenHeader}>
+        <View style={styles.screenHeaderLogoWrap}>
+          <Image source={require('../assets/logo.png')} style={styles.screenHeaderLogo} resizeMode="contain" />
+        </View>
+        <View>
+          <Text style={styles.screenHeaderTitle}>Messages</Text>
+          <Text style={styles.screenHeaderSub}>{messages.length} total</Text>
+        </View>
+      </View>
+
       <FlatList
         data={messages}
         keyExtractor={m => m.id}
@@ -189,7 +200,7 @@ export default function MessagesScreen() {
         ListEmptyComponent={
           !loading ? (
             <View style={styles.empty}>
-              <Text style={styles.emptyIcon}>⊠</Text>
+              <Text style={styles.emptyIcon}>✉</Text>
               <Text style={styles.emptyTitle}>No Messages Yet</Text>
               <Text style={styles.emptySub}>
                 Sent and received messages will appear here once the gateway is active.
@@ -209,7 +220,29 @@ export default function MessagesScreen() {
 
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.bg},
-  list: {padding: Spacing.md, paddingBottom: Spacing.xl},
+  list: {paddingHorizontal: Spacing.md, paddingTop: Spacing.xs, paddingBottom: Spacing.xl},
+
+  // Screen header
+  screenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
+  },
+  screenHeaderLogoWrap: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: 'rgba(34,197,94,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  screenHeaderLogo: {width: 24, height: 24},
+  screenHeaderTitle: {fontSize: Typography.base, fontWeight: Typography.bold, color: Colors.textPrimary},
+  screenHeaderSub: {fontSize: Typography.xs, color: Colors.textMuted, marginTop: 1},
 
   row: {
     flexDirection: 'row',

@@ -41,14 +41,41 @@ export const userDb = {
     await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, id]);
   },
 
-  async setPlan(id: string, plan: PlanName, subscriptionCode: string | null, customerCode: string | null): Promise<void> {
+  async setResetToken(email: string, token: string, expires: Date): Promise<void> {
     await pool.query(
-      `UPDATE users SET plan = $1, paystack_subscription_code = $2, paystack_customer_code = $3 WHERE id = $4`,
-      [plan, subscriptionCode, customerCode, id],
+      'UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE email = $3',
+      [token, expires, email.toLowerCase()],
     );
   },
 
-  // Reset SMS counter and set expiry 30 days from now
+  async getByResetToken(token: string): Promise<UserRow | null> {
+    const { rows } = await pool.query(
+      'SELECT * FROM users WHERE reset_token = $1 AND reset_token_expires > NOW()',
+      [token],
+    );
+    return rows[0] ?? null;
+  },
+
+  async clearResetToken(id: string): Promise<void> {
+    await pool.query(
+      'UPDATE users SET reset_token = NULL, reset_token_expires = NULL WHERE id = $1',
+      [id],
+    );
+  },
+
+  async setPlan(id: string, plan: PlanName, subscriptionCode: string | null, customerCode: string | null): Promise<void> {
+    // plan_expires_at = 31 days from now; free plan has no expiry
+    const expiresAt = plan === 'free' ? null : new Date(Date.now() + 31 * 24 * 60 * 60 * 1000);
+    await pool.query(
+      `UPDATE users
+       SET plan = $1, paystack_subscription_code = $2, paystack_customer_code = $3,
+           plan_expires_at = $4
+       WHERE id = $5`,
+      [plan, subscriptionCode, customerCode, expiresAt, id],
+    );
+  },
+
+  // Reset SMS counter and set next reset 30 days from now
   async setSmsPlanExpiry(id: string): Promise<void> {
     await pool.query(
       `UPDATE users SET sms_used_month = 0, sms_reset_at = NOW() + INTERVAL '30 days' WHERE id = $1`,

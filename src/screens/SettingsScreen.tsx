@@ -2,7 +2,7 @@ import React, {useState, useEffect} from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
   TextInput, Switch, TouchableOpacity,
-  Alert, ActivityIndicator, Modal, KeyboardAvoidingView, Platform,
+  Alert, ActivityIndicator, Modal, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import {Colors, Typography, Spacing, Radius} from '../theme';
 import {Webhook} from '../types';
@@ -266,6 +266,17 @@ export default function SettingsScreen() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}>
 
+      {/* ── Screen Header ── */}
+      <View style={styles.screenHeader}>
+        <View style={styles.screenHeaderLogoWrap}>
+          <Image source={require('../assets/logo.png')} style={styles.screenHeaderLogo} resizeMode="contain" />
+        </View>
+        <View>
+          <Text style={styles.screenHeaderTitle}>Settings</Text>
+          <Text style={styles.screenHeaderSub}>Configure your gateway</Text>
+        </View>
+      </View>
+
       {/* ── Cloud Server ── */}
       <Section
         title="Cloud Server"
@@ -448,6 +459,27 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: Colors.bg},
   content: {padding: Spacing.md, paddingBottom: 40, gap: Spacing.sm},
+
+  // Screen header
+  screenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  screenHeaderLogoWrap: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: 'rgba(34,197,94,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  screenHeaderLogo: {width: 24, height: 24},
+  screenHeaderTitle: {fontSize: Typography.base, fontWeight: Typography.bold, color: Colors.textPrimary},
+  screenHeaderSub: {fontSize: Typography.xs, color: Colors.textMuted, marginTop: 1},
   loading: {flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, backgroundColor: Colors.bg},
   loadingText: {fontSize: Typography.sm, color: Colors.textMuted},
 

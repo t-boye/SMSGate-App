@@ -3,8 +3,8 @@ name: Build & Release APK
 on:
   push:
     tags:
-      - 'v*'           # triggers on v1.0, v1.2.3, etc.
-  workflow_dispatch:   # allows manual trigger from GitHub Actions UI
+      - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -33,6 +33,18 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
+      - name: Generate debug keystore (used as release signing fallback)
+        run: |
+          keytool -genkeypair -v \
+            -keystore android/app/debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=SMSGate,O=SMSGate,C=GH" 2>/dev/null || true
+
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
@@ -40,6 +52,12 @@ jobs:
         run: |
           cd android
           ./gradlew assembleRelease --no-daemon
+        env:
+          # If you add a real keystore later, set these in GitHub repo secrets
+          RELEASE_STORE_FILE: ""
+          RELEASE_STORE_PASSWORD: ""
+          RELEASE_KEY_ALIAS: ""
+          RELEASE_KEY_PASSWORD: ""
 
       - name: Rename APK
         run: |
@@ -51,14 +69,18 @@ jobs:
         with:
           name: SMSGate ${{ github.ref_name }}
           body: |
-            ## Install
+            ## Install on Android
 
-            1. On your Android phone, open this URL in Chrome:
-               **https://sms-gate-app.vercel.app**
-            2. Tap **Download APK**
-            3. Enable "Install from unknown sources" if prompted
-            4. Install and open the app
-            5. Go to Settings → Cloud Server → enter your credentials
+            1. On your Android phone open **Chrome** and go to:
+               `https://github.com/t-boye/SMSGate-App/releases/latest/download/smsgate.apk`
+            2. Tap **Download** when prompted
+            3. Open your Downloads app and tap **smsgate.apk**
+            4. If prompted, enable **"Install unknown apps"** for Chrome
+            5. Tap **Install** → **Open**
+            6. Go to **Settings** → enter your Server URL and Device credentials from the dashboard
+
+            ## What's new in ${{ github.ref_name }}
+            See commit history for changes.
           files: android/app/build/outputs/apk/release/smsgate.apk
           draft: false
           prerelease: false

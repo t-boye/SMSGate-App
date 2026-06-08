@@ -9,9 +9,9 @@ const router = Router();
 // Plan prices in GHS (pesewas × 100)
 const PLAN_PRICES_GHS: Record<PlanName, number> = {
   free:     0,
-  basic:    17000,   // GHS 170 / month (~$15)
-  pro:      55000,   // GHS 550 / month (~$49)
-  business: 168000,  // GHS 1680 / month (~$149)
+  basic:    1500,    // GHS 15 / month
+  pro:      4000,    // GHS 40 / month
+  business: 10000,   // GHS 100 / month
 };
 
 const PAYSTACK_SECRET = () => {
@@ -45,7 +45,7 @@ router.post('/initialize', requireUser, async (req: Request, res: Response) => {
   }
 
   const amount = PLAN_PRICES_GHS[plan];
-  const dashboardUrl = process.env.DASHBOARD_URL ?? 'https://sms-gate-app.vercel.app';
+  const dashboardUrl = process.env.DASHBOARD_URL ?? 'https://sms-gate-app-t3ay.vercel.app';
 
   const response = await fetch('https://api.paystack.co/transaction/initialize', {
     method: 'POST',

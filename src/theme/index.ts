@@ -9,15 +9,15 @@ function fs(size: number): number {
 
 export const Colors = {
   // Backgrounds
-  bg: '#0A0E1A',
-  surface: '#111827',
-  surfaceElevated: '#1A2236',
-  surfaceBorder: '#1E2D45',
+  bg: '#060b14',
+  surface: '#0d1117',
+  surfaceElevated: '#111827',
+  surfaceBorder: '#1e293b',
 
-  // Accent
-  gold: '#C9A84C',
-  goldLight: '#E8C97A',
-  goldDim: '#C9A84C22',
+  // Accent — green brand (#22c55e) to match dashboard
+  gold: '#22C55E',
+  goldLight: '#4ADE80',
+  goldDim: '#22C55E18',
 
   // Status
   success: '#22C55E',
@@ -33,7 +33,7 @@ export const Colors = {
   textPrimary: '#F1F5F9',
   textSecondary: '#94A3B8',
   textMuted: '#475569',
-  textInverse: '#0A0E1A',
+  textInverse: '#000000',
 } as const;
 
 export const Typography = {

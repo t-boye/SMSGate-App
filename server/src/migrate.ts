@@ -18,6 +18,10 @@ async function migrate() {
       paystack_subscription_code TEXT,
       created_at                 TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token         TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_expires_at     TIMESTAMPTZ;
   `);
 
   // ── Devices ──────────────────────────────────────────────────────────────────

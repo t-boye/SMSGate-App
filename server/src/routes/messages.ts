@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { requireApiKey, requireDevice } from '../middleware/auth';
 import { pool, messageDb, deviceDb, userDb } from '../database';
-import { SendMessageBody, UpdateMessageBody, PLANS } from '../types';
+import { SendMessageBody, UpdateMessageBody, PLANS, effectivePlan } from '../types';
 
 const router = Router();
 
@@ -18,7 +18,7 @@ router.post('/', requireApiKey, async (req: Request, res: Response) => {
   // Enforce SMS quota if request is tied to a user
   const user = req.user;
   if (user) {
-    const plan = PLANS[user.plan];
+    const plan = PLANS[effectivePlan(user)];
     if (plan.smsLimit !== -1) {
       // Reset counter if month has rolled over
       const fresh = await userDb.getById(user.id);

@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   title: 'SMSGate – SMS Gateway Platform',
   description: 'Turn your Android phone into a programmable SMS gateway',
   icons: { icon: '/logo.png', apple: '/logo.png' },
+  manifest: '/manifest.json',
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'SMSGate' },
+  other: { 'mobile-web-app-capable': 'yes', 'theme-color': '#22c55e' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
